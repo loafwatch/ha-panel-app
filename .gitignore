@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.env.*
+# Local list of private words the privacy scan blocks. NEVER commit.
+.private-terms
+.private-terms-required

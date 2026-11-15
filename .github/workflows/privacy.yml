@@ -1,0 +1,39 @@
+name: Privacy scan
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Private words list comes from the PRIVATE_TERMS repository secret and is
+      # never printed. Matches are reported by file and line only.
+      - name: Scan all files for personal data
+        env:
+          PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
+        run: node scripts/privacy-scan.mjs --all
+
+      - name: Scan commit messages for personal data
+        env:
+          PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
+        run: |
+          git log --format=%B -n 50 > /tmp/messages.txt
+          node scripts/privacy-scan.mjs --message /tmp/messages.txt
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
