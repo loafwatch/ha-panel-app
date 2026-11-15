@@ -57,8 +57,10 @@ export class PanelVoice extends LitElement {
     const showHeard = s !== "listening" && ok(heard);
     const showReply = (s === "responding" || s === "idle") && ok(reply);
     return html`
-      <div class="ov" @click=${() => (this.visible = false)}>
-        <div class="orb s-${s}"><i></i><i></i><i></i></div>
+      <div class="ov s-${s}" @click=${() => (this.visible = false)}>
+        <div class="edge soft"><i></i></div>
+        <div class="edge"><i></i></div>
+        <div class="bars">${[0, 1, 2, 3, 4].map((i) => html`<i style="--i:${i}"></i>`)}</div>
         <div class="status">${s === "listening" ? "Listening…" : s === "processing" ? "Thinking…" : ""}</div>
         ${showHeard ? html`<div class="heard">“${heard}”</div>` : nothing}
         ${showReply ? html`<div class="reply">${reply}</div>` : nothing}
@@ -77,8 +79,8 @@ export class PanelVoice extends LitElement {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 22px;
-        padding: 40px;
+        gap: 18px;
+        padding: 60px;
         background: rgba(10, 4, 20, 0.62);
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
@@ -92,83 +94,114 @@ export class PanelVoice extends LitElement {
           opacity: 0;
         }
       }
-      .orb {
-        position: relative;
-        width: 150px;
-        height: 150px;
-      }
-      .orb i {
+
+      /* glowing screen edge: a rotating conic gradient clipped to a ring */
+      .edge {
         position: absolute;
         inset: 0;
-        border-radius: 50%;
-        background: radial-gradient(circle at 35% 30%, #fff 0, var(--pk) 30%, var(--pu) 65%, transparent 72%);
-        box-shadow: 0 0 40px var(--pk), 0 0 80px rgba(122, 27, 209, 0.6);
+        padding: 7px;
+        overflow: hidden;
+        pointer-events: none;
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+        transition: opacity 0.6s;
       }
-      .orb i:nth-child(2),
-      .orb i:nth-child(3) {
-        background: none;
-        border: 2px solid rgba(0, 229, 240, 0.7);
-        box-shadow: 0 0 18px rgba(0, 229, 240, 0.5);
+      .edge.soft {
+        padding: 30px;
+        opacity: 0.4;
       }
-      .s-listening i:first-child {
-        animation: breathe 1.4s ease-in-out infinite;
+      .edge i {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 200vmax;
+        height: 200vmax;
+        margin: -100vmax 0 0 -100vmax;
+        background: conic-gradient(#ff2e97, #7a1bd1, #00c8d4, #ff6ec7, #ff2e97);
+        animation: spin 4s linear infinite;
       }
-      .s-listening i:nth-child(2) {
-        animation: ripple 1.6s ease-out infinite;
+      .s-processing .edge i {
+        animation-duration: 1.6s;
       }
-      .s-listening i:nth-child(3) {
-        animation: ripple 1.6s ease-out 0.8s infinite;
+      .s-idle .edge {
+        opacity: 0.25;
       }
-      .s-processing i:first-child {
-        animation: spin 1.2s linear infinite;
-        background: conic-gradient(from 0deg, var(--pk), var(--pu), var(--cy-bright), var(--pk));
-        -webkit-mask: radial-gradient(circle, transparent 52%, #000 54%);
-        mask: radial-gradient(circle, transparent 52%, #000 54%);
-      }
-      .s-processing i:nth-child(2),
-      .s-processing i:nth-child(3),
-      .s-idle i:nth-child(2),
-      .s-idle i:nth-child(3) {
-        display: none;
-      }
-      .s-responding i:first-child {
-        animation: talk 0.5s ease-in-out infinite alternate;
-      }
-      .s-responding i:nth-child(2) {
-        animation: ripple 1.2s ease-out infinite;
-      }
-      .s-responding i:nth-child(3) {
-        display: none;
-      }
-      @keyframes breathe {
-        50% {
-          transform: scale(1.08);
-        }
-      }
-      @keyframes ripple {
-        from {
-          transform: scale(0.9);
-          opacity: 0.9;
-        }
-        to {
-          transform: scale(1.7);
-          opacity: 0;
-        }
+      .s-idle .edge.soft {
+        opacity: 0.1;
       }
       @keyframes spin {
         to {
           transform: rotate(360deg);
         }
       }
-      @keyframes talk {
-        to {
-          transform: scale(1.12);
+
+      /* sound bars */
+      .bars {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        height: 170px;
+      }
+      .bars i {
+        width: 24px;
+        height: 160px;
+        border-radius: 12px;
+        background: linear-gradient(#ff2e97, #7a1bd1 55%, #00c8d4);
+        transform: scaleY(0.18);
+        animation: bounce 1s ease-in-out infinite;
+        animation-delay: calc(var(--i) * -0.23s - (var(--i) * var(--i)) * 0.05s);
+      }
+      .s-listening .bars i {
+        animation-duration: calc(0.8s + var(--i) * 0.07s);
+      }
+      .s-processing .bars i {
+        animation: wave 1.1s ease-in-out infinite;
+        animation-delay: calc(var(--i) * 0.12s);
+      }
+      .s-responding .bars i {
+        animation-duration: calc(0.42s + var(--i) * 0.05s);
+      }
+      .s-idle .bars i {
+        animation: none;
+        transform: scaleY(0.12);
+        transition: transform 0.5s;
+      }
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: scaleY(0.18);
+        }
+        50% {
+          transform: scaleY(1);
+        }
+      }
+      @keyframes wave {
+        0%,
+        100% {
+          transform: scaleY(0.15);
+        }
+        30% {
+          transform: scaleY(0.5);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .edge i,
+        .bars i {
+          animation: none !important;
         }
       }
       .status {
-        font-size: 18px;
-        color: rgba(255, 255, 255, 0.75);
-        min-height: 22px;
+        margin-top: 36px;
+        font-size: 36px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        color: #fff;
+        min-height: 44px;
+      }
+      .s-responding .status,
+      .s-idle .status {
+        display: none;
       }
       .heard {
         font-size: 24px;
