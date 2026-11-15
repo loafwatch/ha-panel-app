@@ -79,10 +79,7 @@ export class HaPanelApp extends LitElement {
     window.addEventListener("pointerdown", this.activity, { capture: true, passive: true });
     this.addEventListener("pointerdown", this.onPointerDown, { capture: true, passive: true });
     this.addEventListener("pointermove", this.onPointerMove, { capture: true, passive: true });
-    if (new URLSearchParams(location.search).has("kiosk")) {
-      // Hide Home Assistant's sidebar on the wall tablet.
-      this.dispatchEvent(new CustomEvent("hass-dock-sidebar", { detail: { dock: "always_hidden" }, bubbles: true, composed: true }));
-    }
+    this.applyKiosk();
     this.resetIdle();
   }
 
@@ -93,8 +90,20 @@ export class HaPanelApp extends LitElement {
     this.hub.stop();
   }
 
+  private kioskApplied = false;
+
+  /** Hide Home Assistant's sidebar on the wall tablet (config `kiosk: true` or `?kiosk` in the URL). */
+  private applyKiosk() {
+    if (this.kioskApplied) return;
+    const want = this.config.kiosk || new URLSearchParams(location.search).has("kiosk");
+    if (!want) return;
+    this.kioskApplied = true;
+    this.dispatchEvent(new CustomEvent("hass-dock-sidebar", { detail: { dock: "always_hidden" }, bubbles: true, composed: true }));
+  }
+
   protected willUpdate(changed: PropertyValues) {
     if (!this.hass) return;
+    if (changed.has("panel")) this.applyKiosk();
     this.dark = !!this.hass.themes?.darkMode;
     if (changed.has("panel") || !changed.get("hass")) this.hub.start(this.hass, this.config);
     this.hub.update(this.hass);

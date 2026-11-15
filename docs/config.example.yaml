@@ -6,6 +6,7 @@ panel_custom:
     sidebar_icon: mdi:tablet-dashboard
     module_url: /local/community/ha-panel-app/ha-panel-app.js
     config:
+      kiosk: true                             # hide the Home Assistant sidebar on the tablet
       page_entity: input_text.panel_page      # automations set this to e.g. "music" or "photos"
       idle_seconds: 120                       # photo screensaver after 2 minutes untouched
       weather: weather.home
