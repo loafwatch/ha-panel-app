@@ -2,6 +2,7 @@ import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
+import type { PanelConfig } from "../types";
 import type { CalEvent } from "../data";
 import { fmtTime, sameDay } from "../util";
 
@@ -34,8 +35,7 @@ export class PageCalendar extends PageBase {
   }
 
   private color(cal: string) {
-    const i = (this.config.calendars ?? []).indexOf(cal);
-    return PALETTE[Math.max(0, i) % PALETTE.length];
+    return calColor(this.config, cal);
   }
 
   private eventsOn(d: Date) {
@@ -244,6 +244,12 @@ export class PageCalendar extends PageBase {
 
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+/** Stable accent colour for a calendar, by its position in the config. */
+export function calColor(config: PanelConfig, cal: string) {
+  const i = (config.calendars ?? []).indexOf(cal);
+  return PALETTE[Math.max(0, i) % PALETTE.length];
 }
 
 reg("panel-calendar", PageCalendar);

@@ -124,6 +124,8 @@ export class HaPanelApp extends LitElement {
   };
 
   // ---------- two-finger swipe ----------
+  // One page per gesture: two fingers moving sideways flips to the next or
+  // previous page, and nothing else happens until the fingers lift.
 
   private get twoFinger() {
     return this.config.swipe_fingers === 2;
@@ -136,44 +138,36 @@ export class HaPanelApp extends LitElement {
   }
 
   private onTouchStart = (e: TouchEvent) => {
-    if (!this.twoFinger || e.touches.length !== 2 || !this.pager) return;
-    const m = this.mid(e);
-    this.drag = { x: m.x, y: m.y, left: this.pager.scrollLeft, dx: 0, t: performance.now() };
+    if (!this.twoFinger) return;
+    if (e.touches.length === 2) {
+      const m = this.mid(e);
+      this.drag = { x: m.x, y: m.y, left: 0, dx: 0, t: performance.now() };
+    } else if (e.touches.length > 2) {
+      this.drag = undefined;
+    }
   };
 
   private onTouchMove = (e: TouchEvent) => {
     const d = this.drag;
-    const el = this.pager;
-    if (!d || !el || e.touches.length < 2) return;
+    if (!d || e.touches.length !== 2) return;
     const m = this.mid(e);
     const dx = m.x - d.x;
     const dy = m.y - d.y;
-    if (!d.lock && Math.hypot(dx, dy) > 12) {
-      d.lock = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-      if (d.lock === "x") el.classList.add("dragging");
+    if (!d.lock) {
+      if (Math.hypot(dx, dy) < 14) return;
+      d.lock = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
     }
     if (d.lock !== "x") return;
     e.preventDefault();
+    if (d.dx) return; // already flipped for this gesture
+    if (Math.abs(dx) < 60) return;
     d.dx = dx;
-    const max = el.scrollWidth - el.clientWidth;
-    el.scrollLeft = Math.min(max, Math.max(0, d.left - dx));
+    const to = Math.max(0, Math.min(this.pages.length - 1, this.index + (dx < 0 ? 1 : -1)));
+    if (to !== this.index) this.goTo(this.pages[to].id);
   };
 
   private onTouchEnd = (e: TouchEvent) => {
-    const d = this.drag;
-    const el = this.pager;
-    if (!d || e.touches.length >= 2) return;
-    this.drag = undefined;
-    if (!el || d.lock !== "x") return;
-    el.classList.remove("dragging");
-    const w = el.clientWidth;
-    const fast = Math.abs(d.dx) / Math.max(1, performance.now() - d.t) > 0.4; // px per ms
-    const from = Math.round(d.left / w);
-    let to = from;
-    if (d.dx < -w * 0.18 || (fast && d.dx < -40)) to = from + 1;
-    else if (d.dx > w * 0.18 || (fast && d.dx > 40)) to = from - 1;
-    to = Math.max(0, Math.min(this.pages.length - 1, to));
-    this.goTo(this.pages[to].id);
+    if (e.touches.length === 0) this.drag = undefined;
   };
 
   /** An automation can set the page entity to e.g. "music" or "photos". A suffix after "|"
@@ -294,9 +288,6 @@ export class HaPanelApp extends LitElement {
       .pager.two {
         overflow-x: hidden;
         touch-action: pan-y;
-      }
-      .pager.dragging {
-        scroll-snap-type: none;
       }
       .pager::-webkit-scrollbar {
         display: none;

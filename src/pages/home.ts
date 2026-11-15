@@ -6,6 +6,7 @@ import { activeRoom, roomState } from "./music-state";
 import { binsInfo } from "./bins";
 import { timersOf } from "./timers-state";
 import "../components/weather-fx";
+import { calColor } from "./calendar";
 import { WEATHER_ICON, call, dayLabel, fmtCountdown, fmtDay, fmtTime, isOn, longPress, weatherLabel } from "../util";
 
 export class PageHome extends PageBase {
@@ -81,7 +82,7 @@ export class PageHome extends PageBase {
               last = d;
               const live = !e.allDay && e.start.getTime() <= Date.now() && e.end.getTime() > Date.now();
               return html`${head}
-                <div class="ev ${live ? "live" : ""}">
+                <div class="ev ${live ? "live" : ""}" style="--c:${calColor(this.config, e.calendar)}">
                   <span class="when">${e.allDay ? "All day" : fmtTime(e.start)}</span>
                   <span class="what">${e.summary}</span>
                 </div>`;
@@ -407,9 +408,13 @@ export class PageHome extends PageBase {
       .ev {
         display: flex;
         gap: 12px;
-        padding: 6px 0;
+        padding: 7px 0 7px 12px;
+        margin: 4px 0;
         font-size: 15px;
         line-height: 1.35;
+        border-left: 4px solid var(--c, var(--accent));
+        border-radius: 4px;
+        background: var(--tile-2);
       }
       .ev .when {
         flex: 0 0 62px;
