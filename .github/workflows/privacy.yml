@@ -19,16 +19,13 @@ jobs:
         with:
           node-version: 22
 
-      # Private words list comes from the PRIVATE_TERMS repository secret and is
-      # never printed. Matches are reported by file and line only.
-      - name: Scan all files for personal data
-        env:
-          PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
+      # Generic leak patterns only (IPs, hostnames, emails, tokens, keys).
+      # The private words list is deliberately NOT stored on GitHub; that check
+      # runs locally in the git hooks before anything is pushed.
+      - name: Scan all files for leak patterns
         run: node scripts/privacy-scan.mjs --all
 
-      - name: Scan commit messages for personal data
-        env:
-          PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
+      - name: Scan commit messages for leak patterns
         run: |
           git log --format=%B -n 50 > /tmp/messages.txt
           node scripts/privacy-scan.mjs --message /tmp/messages.txt

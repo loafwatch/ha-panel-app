@@ -11,4 +11,4 @@ This repository is public. It must never contain personal data about the househo
 - Examples, docs, tests and fixtures use made-up values only: "Room A", "Speaker 1", `media_player.example_speaker`, `calendar.family`, `example.com`.
 - Commit messages and PR text follow the same rules.
 - `scripts/privacy-scan.mjs` runs in the pre-commit, commit-msg and pre-push hooks (`git config core.hooksPath .githooks`) and in CI. Never bypass it (no `--no-verify`). If it flags something, remove the data; do not weaken the scan.
-- The private words list lives in `.private-terms` (git-ignored, local) and the `PRIVATE_TERMS` Actions secret. Never commit it or print its contents.
+- The private words list lives only in `.private-terms` (git-ignored, local to the working copy). It is never committed, never stored on GitHub (no Actions secret) and never printed. CI checks generic leak patterns only; the private-words check happens locally before every commit and push.

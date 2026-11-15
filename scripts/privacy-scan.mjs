@@ -3,8 +3,8 @@
 //
 // Checks every file (and optionally a commit message) for:
 //   1. Private terms - names, places, hostnames, entity names - loaded from
-//      `.private-terms` (local, git-ignored) or the PRIVATE_TERMS environment
-//      variable (GitHub Actions secret). The list itself is never committed.
+//      `.private-terms` (local, git-ignored). The list never leaves the
+//      developer's machine: it is not committed and not stored on GitHub.
 //   2. Leak patterns - private IP addresses, .local hostnames, email addresses,
 //      Home Assistant tokens / JWTs, bearer tokens, private keys.
 //
@@ -24,7 +24,7 @@ const mode = args[0] ?? "--staged";
 
 // ---------- private terms ----------
 function loadTerms() {
-  let raw = process.env.PRIVATE_TERMS ?? "";
+  let raw = "";
   if (existsSync(".private-terms")) raw += "\n" + readFileSync(".private-terms", "utf8");
   return raw
     .split(/[\n,]/)
@@ -33,9 +33,9 @@ function loadTerms() {
 }
 
 const terms = loadTerms();
-const requireTerms = process.env.CI === "true" || existsSync(".private-terms-required");
+const requireTerms = existsSync(".private-terms-required");
 if (terms.length === 0) {
-  const msg = "privacy-scan: no private terms loaded (.private-terms file or PRIVATE_TERMS secret).";
+  const msg = "privacy-scan: no private terms loaded (.private-terms file).";
   if (requireTerms) {
     console.error(msg + " Refusing to pass without them.");
     process.exit(1);
