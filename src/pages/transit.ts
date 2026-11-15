@@ -200,7 +200,8 @@ export class PageTransit extends PageBase {
     const W = 1000;
     const H = 250;
     const y = 150;
-    const x = (i: number) => 30 + (i / (stops.length - 1)) * (W - 60);
+    // leave room on the right for the last stop's rotated label
+    const x = (i: number) => 30 + (i / (stops.length - 1)) * (W - 130);
     return svg`<svg viewBox="0 0 ${W} ${H}" class="svg">
       <line x1="${x(0)}" x2="${x(stops.length - 1)}" y1="${y}" y2="${y}" class="rail" />
       ${stops.map((s, i) => {
@@ -211,7 +212,7 @@ export class PageTransit extends PageBase {
         </g>`;
       })}
       ${vehicles.map((v) => {
-        const vx = 30 + v.frac * (W - 60);
+        const vx = 30 + v.frac * (W - 130);
         const vy = v.dir === "ab" ? y + 34 : y + 70;
         return svg`<g class="veh ${v.dir} ${v.live ? "live" : ""}" transform="translate(${vx} ${vy})">
           <title>${v.label}</title>
