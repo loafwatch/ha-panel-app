@@ -1,18 +1,37 @@
 import { reg } from "../registry";
-import { css, html, nothing, svg } from "lit";
+import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
 
-interface Pt {
+type Range = "day" | "week" | "month" | "year";
+type Kind = "electricity" | "gas";
+interface Bar {
   t: number;
-  v: number;
+  kwh: number;
+  cost?: number;
+  future: boolean;
+}
+interface Source {
+  energy: string;
+  cost?: string;
 }
 
+const RANGES: { id: Range; label: string }[] = [
+  { id: "day", label: "Day" },
+  { id: "week", label: "Week" },
+  { id: "month", label: "Month" },
+  { id: "year", label: "Year" },
+];
+
 export class PageEnergy extends PageBase {
-  @state() private series: Pt[] = [];
-  @state() private hours = 24;
-  private loaded = 0;
-  private loadedHours = 0;
+  @state() private range: Range = "week";
+  @state() private kind: Kind = "electricity";
+  @state() private bars: Bar[] = [];
+  @state() private sel?: number;
+  @state() private sources: Partial<Record<Kind, Source>> = {};
+  private loadedKey = "";
+  private loadedAt = 0;
+  private prefsLoaded = false;
 
   protected watched() {
     const e = this.config.energy;
@@ -21,43 +40,95 @@ export class PageEnergy extends PageBase {
 
   protected updated(c: Map<string, unknown>) {
     super.updated(c as any);
-    if (this.active && (Date.now() - this.loaded > 5 * 60 * 1000 || this.loadedHours !== this.hours)) this.load();
+    if (!this.active) return;
+    if (!this.prefsLoaded) {
+      this.prefsLoaded = true;
+      this.loadPrefs();
+      return;
+    }
+    const key = this.range + "|" + this.kind;
+    if (key !== this.loadedKey || Date.now() - this.loadedAt > 5 * 60 * 1000) this.load();
+  }
+
+  /** Meters come from Home Assistant's own Energy dashboard settings. */
+  private async loadPrefs() {
+    try {
+      const p = await this.hass.callWS<{ energy_sources: any[] }>({ type: "energy/get_prefs" });
+      const src: Partial<Record<Kind, Source>> = {};
+      for (const s of p.energy_sources ?? []) {
+        if (s.type === "grid" && s.stat_energy_from && !src.electricity) src.electricity = { energy: s.stat_energy_from, cost: s.stat_cost ?? undefined };
+        if (s.type === "gas" && s.stat_energy_from && !src.gas) src.gas = { energy: s.stat_energy_from, cost: s.stat_cost ?? undefined };
+      }
+      this.sources = src;
+      if (!src[this.kind]) this.kind = src.electricity ? "electricity" : "gas";
+    } catch (e) {
+      console.warn("ha-panel-app: energy prefs", e);
+    }
+    this.requestUpdate();
+  }
+
+  private slots(): { start: Date; starts: number[]; period: "hour" | "day" | "month" } {
+    const now = new Date();
+    const mid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const days = (n: number) => {
+      const out: number[] = [];
+      for (let i = n - 1; i >= 0; i--) out.push(new Date(mid.getFullYear(), mid.getMonth(), mid.getDate() - i).getTime());
+      return out;
+    };
+    switch (this.range) {
+      case "day": {
+        const out: number[] = [];
+        for (let h = 0; h < 24; h++) out.push(new Date(mid.getFullYear(), mid.getMonth(), mid.getDate(), h).getTime());
+        return { start: mid, starts: out, period: "hour" };
+      }
+      case "week":
+        return { start: new Date(days(7)[0]), starts: days(7), period: "day" };
+      case "month":
+        return { start: new Date(days(30)[0]), starts: days(30), period: "day" };
+      case "year": {
+        const out: number[] = [];
+        for (let i = 11; i >= 0; i--) out.push(new Date(now.getFullYear(), now.getMonth() - i, 1).getTime());
+        return { start: new Date(out[0]), starts: out, period: "month" };
+      }
+    }
   }
 
   private async load() {
-    const id = this.config.energy?.power;
-    if (!id) return;
-    this.loaded = Date.now();
-    this.loadedHours = this.hours;
-    const start = new Date(Date.now() - this.hours * 3600 * 1000);
+    const src = this.sources[this.kind];
+    const key = this.range + "|" + this.kind;
+    this.loadedKey = key;
+    this.loadedAt = Date.now();
+    if (!src) return;
+    const { start, starts, period } = this.slots();
+    const ids = [src.energy, src.cost].filter(Boolean) as string[];
     try {
-      const r = await this.hass.callWS<Record<string, { s: string; lu: number }[]>>({
-        type: "history/history_during_period",
+      const r = await this.hass.callWS<Record<string, { start: number | string; change?: number | null }[]>>({
+        type: "recorder/statistics_during_period",
         start_time: start.toISOString(),
-        entity_ids: [id],
-        minimal_response: true,
-        no_attributes: true,
+        statistic_ids: ids,
+        period,
+        types: ["change"],
       });
-      const raw = (r[id] ?? []).map((x) => ({ t: x.lu * 1000, v: Number(x.s) })).filter((x) => !isNaN(x.v));
-      // average into buckets so the chart stays light
-      const bucket = (this.hours * 3600 * 1000) / 144;
-      const out: Pt[] = [];
-      let i = 0;
-      let last = raw[0]?.v ?? 0;
-      for (let b = start.getTime(); b < Date.now(); b += bucket) {
-        let sum = 0;
-        let n = 0;
-        while (i < raw.length && raw[i].t < b + bucket) {
-          sum += raw[i].v;
-          n++;
-          last = raw[i].v;
-          i++;
+      if (key !== this.range + "|" + this.kind) return; // user moved on
+      const pick = (id?: string) => {
+        const m = new Map<number, number>();
+        if (!id) return m;
+        for (const row of r[id] ?? []) {
+          const t = typeof row.start === "number" ? row.start : Date.parse(row.start);
+          // file each row under the slot it starts in
+          let k = -1;
+          for (let i = 0; i < starts.length && starts[i] <= t + 60_000; i++) k = i;
+          if (k >= 0) m.set(k, (m.get(k) ?? 0) + (row.change ?? 0));
         }
-        out.push({ t: b, v: n ? sum / n : last });
-      }
-      this.series = out;
+        return m;
+      };
+      const kwh = pick(src.energy);
+      const cost = src.cost ? pick(src.cost) : undefined;
+      const now = Date.now();
+      this.bars = starts.map((t, i) => ({ t, kwh: Math.max(0, kwh.get(i) ?? 0), cost: cost?.get(i), future: t > now }));
+      this.sel = undefined;
     } catch (e) {
-      console.warn("ha-panel-app: energy history", e);
+      console.warn("ha-panel-app: energy statistics", e);
     }
   }
 
@@ -89,9 +160,17 @@ export class PageEnergy extends PageBase {
         </div>
         <div class="tile chart">
           <div class="chead">
-            <div class="label"><ha-icon icon="mdi:chart-areaspline"></ha-icon>Power</div>
             <div class="seg">
-              ${[6, 24, 48].map((h) => html`<button class="chip ${this.hours === h ? "on" : ""}" @click=${() => (this.hours = h)}>${h}h</button>`)}
+              ${(["electricity", "gas"] as Kind[])
+                .filter((k) => this.sources[k])
+                .map(
+                  (k) => html`<button class="chip ${this.kind === k ? "on" : ""}" @click=${() => (this.kind = k)}>
+                    <ha-icon icon=${k === "gas" ? "mdi:fire" : "mdi:flash"}></ha-icon>${k === "gas" ? "Gas" : "Electricity"}
+                  </button>`,
+                )}
+            </div>
+            <div class="seg">
+              ${RANGES.map((r) => html`<button class="chip ${this.range === r.id ? "on" : ""}" @click=${() => (this.range = r.id)}>${r.label}</button>`)}
             </div>
           </div>
           ${this.chart()}
@@ -101,40 +180,76 @@ export class PageEnergy extends PageBase {
   }
 
   private chart() {
-    const s = this.series;
-    if (s.length < 2) return html`<div class="empty">Loading…</div>`;
-    const W = 1000;
-    const H = 260;
-    const max = Math.max(500, ...s.map((p) => p.v)) * 1.1;
-    const x = (i: number) => (i / (s.length - 1)) * W;
-    const y = (v: number) => H - (v / max) * H;
-    const line = s.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
-    const area = `${line}L${W},${H}L0,${H}Z`;
-    const peak = s.reduce((a, b) => (b.v > a.v ? b : a));
-    const avg = s.reduce((a, b) => a + b.v, 0) / s.length;
-    const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => new Date(s[0].t + f * (s[s.length - 1].t - s[0].t)));
+    if (!this.sources.electricity && !this.sources.gas)
+      return html`<div class="empty">Add your meters in Home Assistant's Energy settings to see usage here.</div>`;
+    const bars = this.bars;
+    if (!bars.length) return html`<div class="empty">Loading…</div>`;
+    const past = bars.filter((b) => !b.future);
+    const total = past.reduce((s, b) => s + b.kwh, 0);
+    const hasCost = past.some((b) => b.cost != null);
+    const totalCost = past.reduce((s, b) => s + (b.cost ?? 0), 0);
+    const max = Math.max(...bars.map((b) => b.kwh), 0.001);
+    const sel = this.sel != null ? bars[this.sel] : undefined;
+    // average over complete slots only (the current hour/day/month is still filling up)
+    const withData = past.slice(0, -1).filter((b) => b.kwh > 0);
+    const avg = withData.length ? withData.reduce((s, b) => s + b.kwh, 0) / withData.length : 0;
+    const unitWord = this.range === "day" ? "an hour" : this.range === "year" ? "a month" : "a day";
     return html`
-      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="svg">
-        <defs>
-          <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#ff2e97" stop-opacity="0.45" />
-            <stop offset="1" stop-color="#00c8d4" stop-opacity="0.02" />
-          </linearGradient>
-          <linearGradient id="l" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stop-color="#00c8d4" />
-            <stop offset="1" stop-color="#ff2e97" />
-          </linearGradient>
-        </defs>
-        ${[0.25, 0.5, 0.75].map((f) => svg`<line x1="0" x2="${W}" y1="${H * f}" y2="${H * f}" class="grid" />`)}
-        <path d=${area} fill="url(#g)" />
-        <path d=${line} fill="none" stroke="url(#l)" stroke-width="3" vector-effect="non-scaling-stroke" />
-      </svg>
-      <div class="axis muted">${ticks.map((t) => html`<span>${t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>`)}</div>
-      <div class="stats">
-        <span>Peak <b>${fmtW(peak.v)}</b> at ${new Date(peak.t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
-        <span>Average <b>${fmtW(avg)}</b></span>
+      <div class="sum">
+        ${sel
+          ? html`<div class="big">${fmtKwh(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}</div>
+              <div class="muted">${this.slotLabel(sel.t, true)}</div>`
+          : html`<div class="big">${fmtKwh(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}</div>
+              <div class="muted">${this.rangeLabel()} · average ${fmtKwh(avg)} ${unitWord}</div>`}
       </div>
+      <div class="bars ${this.kind}" @click=${(e: Event) => e.target === e.currentTarget && (this.sel = undefined)}>
+        ${[0.25, 0.5, 0.75].map((f) => html`<i class="gl" style="bottom:${f * 100}%"></i>`)}
+        ${bars.map(
+          (b, i) => html`<button
+            class="bar ${b.future ? "future" : ""} ${this.sel === i ? "sel" : ""} ${this.sel != null && this.sel !== i ? "dim" : ""}"
+            ?disabled=${b.future}
+            @click=${() => (this.sel = this.sel === i ? undefined : i)}
+            aria-label=${this.slotLabel(b.t, true) + " " + fmtKwh(b.kwh)}
+          >
+            <span style="height:${b.future ? 0 : Math.max(b.kwh > 0 ? 2 : 0, (b.kwh / max) * 100)}%"></span>
+          </button>`,
+        )}
+      </div>
+      <div class="axis muted">${bars.map((b, i) => html`<span>${this.tickLabel(b.t, i)}</span>`)}</div>
     `;
+  }
+
+  private tickLabel(t: number, i: number) {
+    const d = new Date(t);
+    switch (this.range) {
+      case "day":
+        return i % 3 === 0 ? String(d.getHours()).padStart(2, "0") : "";
+      case "week":
+        return d.toLocaleDateString("en-GB", { weekday: "short" });
+      case "month":
+        return i % 5 === 0 || i === 29 ? String(d.getDate()) : "";
+      case "year":
+        return d.toLocaleDateString("en-GB", { month: "short" }).slice(0, 1);
+    }
+  }
+
+  private slotLabel(t: number, long = false) {
+    const d = new Date(t);
+    switch (this.range) {
+      case "day": {
+        const e = new Date(t + 3600_000);
+        const hm = (x: Date) => x.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+        return `${hm(d)}–${hm(e)}`;
+      }
+      case "year":
+        return d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+      default:
+        return d.toLocaleDateString("en-GB", { weekday: long ? "long" : "short", day: "numeric", month: "long" });
+    }
+  }
+
+  private rangeLabel() {
+    return { day: "Today", week: "Last 7 days", month: "Last 30 days", year: "Last 12 months" }[this.range];
   }
 
   static styles = [
@@ -185,42 +300,99 @@ export class PageEnergy extends PageBase {
         display: flex;
         gap: 8px;
       }
+      .chead {
+        flex-wrap: wrap;
+        gap: 10px;
+      }
       .seg .chip {
-        padding: 6px 14px;
+        padding: 8px 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
       }
-      .svg {
+      .seg .chip ha-icon {
+        --mdc-icon-size: 18px;
+      }
+      .sum {
+        margin: 16px 0 10px;
+        min-height: 62px;
+      }
+      .big {
+        font-size: 34px;
+        font-weight: 400;
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+      }
+      .cost {
+        font-size: 20px;
+        color: var(--text-2);
+      }
+      .bars {
+        --c1: #ff2e97;
+        --c2: #7a1bd1;
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 230px;
+        border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+      }
+      .bars.gas {
+        --c1: #00c8d4;
+        --c2: #2a6bd1;
+      }
+      .gl {
+        position: absolute;
+        left: 0;
+        right: 0;
+        border-top: 1px dashed rgba(127, 127, 127, 0.16);
+        pointer-events: none;
+      }
+      .bar {
+        flex: 1;
+        height: 100%;
+        display: flex;
+        align-items: flex-end;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .bar span {
         width: 100%;
-        height: 260px;
-        margin-top: 10px;
-        display: block;
+        border-radius: 6px 6px 2px 2px;
+        background: linear-gradient(180deg, var(--c1), var(--c2));
+        transition: height 0.35s ease, opacity 0.2s;
       }
-      .grid {
-        stroke: rgba(127, 127, 127, 0.18);
-        stroke-width: 1;
-        vector-effect: non-scaling-stroke;
+      .bar.dim span {
+        opacity: 0.3;
+      }
+      .bar.sel span {
+        box-shadow: 0 0 0 2px var(--c1);
+      }
+      .bar.future {
+        cursor: default;
       }
       .axis {
         display: flex;
-        justify-content: space-between;
+        gap: 4px;
         font-size: 12px;
         margin-top: 6px;
       }
-      .stats {
-        display: flex;
-        gap: 28px;
-        margin-top: 14px;
-        font-size: 15px;
-        color: var(--text-2);
-      }
-      .stats b {
-        color: var(--text);
+      .axis span {
+        flex: 1;
+        text-align: center;
+        white-space: nowrap;
+        overflow: visible;
       }
     `,
   ];
 }
 
-function fmtW(w: number) {
-  return w >= 1000 ? `${(w / 1000).toFixed(2)} kW` : `${Math.round(w)} W`;
+function fmtKwh(k: number) {
+  return `${k >= 100 ? Math.round(k) : k.toFixed(k >= 10 ? 1 : 2)} kWh`;
 }
 
 reg("panel-energy", PageEnergy);
