@@ -89,6 +89,8 @@ export interface PanelConfig {
     power?: string;
     rate?: string;
     costs?: NamedEntity[];
+    /** Individual appliances on smart plugs: live power (W) and an energy sensor (kWh, total_increasing). */
+    devices?: { name: string; icon?: string; power?: string; energy?: string }[];
   };
 
   bins?: {

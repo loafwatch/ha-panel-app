@@ -39,6 +39,8 @@ panel_custom:
         rate: sensor.example_rate
         costs:
           - { name: Electricity, entity: sensor.example_electricity_cost, icon: "mdi:flash" }
+        devices:                              # appliances on smart plugs (optional)
+          - { name: Dishwasher, icon: mdi:dishwasher, power: sensor.plug_1_current_consumption, energy: sensor.plug_1_today_s_consumption }
       bins:
         due_entity: input_boolean.bin_night
         out_entity: input_boolean.bin_out

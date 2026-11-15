@@ -4,7 +4,8 @@ import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
 
 type Range = "day" | "week" | "month" | "year";
-type Kind = "electricity" | "gas";
+/** "electricity", "gas" or "dev:<index into energy.devices>" */
+type Kind = string;
 interface Bar {
   t: number;
   kwh: number;
@@ -29,13 +30,15 @@ export class PageEnergy extends PageBase {
   @state() private bars: Bar[] = [];
   @state() private sel?: number;
   @state() private sources: Partial<Record<Kind, Source>> = {};
+  /** Electricity kWh per slot while a device is selected, for its share of the total. */
+  @state() private elec: number[] = [];
   private loadedKey = "";
   private loadedAt = 0;
   private prefsLoaded = false;
 
   protected watched() {
     const e = this.config.energy;
-    return [e?.power, e?.rate, ...(e?.costs ?? []).map((c) => c.entity)].filter(Boolean) as string[];
+    return [e?.power, e?.rate, ...(e?.costs ?? []).map((c) => c.entity), ...(e?.devices ?? []).map((d) => d.power)].filter(Boolean) as string[];
   }
 
   protected updated(c: Map<string, unknown>) {
@@ -93,14 +96,25 @@ export class PageEnergy extends PageBase {
     }
   }
 
+  private source(kind: Kind): Source | undefined {
+    const m = kind.match(/^dev:(\d+)$/);
+    if (m) {
+      const d = this.config.energy?.devices?.[+m[1]];
+      return d?.energy ? { energy: d.energy } : undefined;
+    }
+    return this.sources[kind];
+  }
+
   private async load() {
-    const src = this.sources[this.kind];
+    const src = this.source(this.kind);
     const key = this.range + "|" + this.kind;
     this.loadedKey = key;
     this.loadedAt = Date.now();
     if (!src) return;
     const { start, starts, period } = this.slots();
-    const ids = [src.energy, src.cost].filter(Boolean) as string[];
+    const isDev = this.kind.startsWith("dev:");
+    const elecId = isDev ? this.sources.electricity?.energy : undefined;
+    const ids = [src.energy, src.cost, elecId].filter(Boolean) as string[];
     try {
       const r = await this.hass.callWS<Record<string, { start: number | string; change?: number | null }[]>>({
         type: "recorder/statistics_during_period",
@@ -126,6 +140,8 @@ export class PageEnergy extends PageBase {
       const cost = src.cost ? pick(src.cost) : undefined;
       const now = Date.now();
       this.bars = starts.map((t, i) => ({ t, kwh: Math.max(0, kwh.get(i) ?? 0), cost: cost?.get(i), future: t > now }));
+      const el = elecId ? pick(elecId) : undefined;
+      this.elec = el ? starts.map((_, i) => Math.max(0, el.get(i) ?? 0)) : [];
       this.sel = undefined;
     } catch (e) {
       console.warn("ha-panel-app: energy statistics", e);
@@ -158,6 +174,24 @@ export class PageEnergy extends PageBase {
               </div>`
             : nothing}
         </div>
+        ${en.devices?.length
+          ? html`<div class="tile apps">
+              <div class="label"><ha-icon icon="mdi:power-plug-outline"></ha-icon>Appliances</div>
+              <div class="applist">
+                ${en.devices.map((d) => {
+                  const dw = Number(this.st(d.power)?.state);
+                  const today = Number(this.st(d.energy)?.state);
+                  const on = dw >= 5;
+                  return html`<div class="app ${on ? "on" : ""}">
+                    <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>
+                    <span class="an">${d.name}</span>
+                    <b>${isNaN(dw) ? "–" : on ? (dw >= 1000 ? (dw / 1000).toFixed(2) + " kW" : Math.round(dw) + " W") : "off"}</b>
+                    <span class="muted">${isNaN(today) ? "" : `${today.toFixed(2)} kWh today`}</span>
+                  </div>`;
+                })}
+              </div>
+            </div>`
+          : nothing}
         <div class="tile chart">
           <div class="chead">
             <div class="seg">
@@ -168,6 +202,13 @@ export class PageEnergy extends PageBase {
                     <ha-icon icon=${k === "gas" ? "mdi:fire" : "mdi:flash"}></ha-icon>${k === "gas" ? "Gas" : "Electricity"}
                   </button>`,
                 )}
+              ${(en.devices ?? []).map((d, i) =>
+                d.energy
+                  ? html`<button class="chip ${this.kind === "dev:" + i ? "on" : ""}" @click=${() => (this.kind = "dev:" + i)}>
+                      <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}
+                    </button>`
+                  : nothing,
+              )}
             </div>
             <div class="seg">
               ${RANGES.map((r) => html`<button class="chip ${this.range === r.id ? "on" : ""}" @click=${() => (this.range = r.id)}>${r.label}</button>`)}
@@ -194,15 +235,19 @@ export class PageEnergy extends PageBase {
     const withData = past.slice(0, -1).filter((b) => b.kwh > 0);
     const avg = withData.length ? withData.reduce((s, b) => s + b.kwh, 0) / withData.length : 0;
     const unitWord = this.range === "day" ? "an hour" : this.range === "year" ? "a month" : "a day";
+    const isDev = this.kind.startsWith("dev:");
+    const elecTotal = isDev ? this.elec.filter((_, i) => !bars[i]?.future).reduce((s, v) => s + v, 0) : 0;
+    const share = isDev && elecTotal > 0 ? Math.round((total / elecTotal) * 100) : undefined;
+    const devName = isDev ? this.config.energy?.devices?.[+this.kind.slice(4)]?.name : undefined;
     return html`
       <div class="sum">
         ${sel
           ? html`<div class="big">${fmtKwh(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}</div>
               <div class="muted">${this.slotLabel(sel.t, true)}</div>`
-          : html`<div class="big">${fmtKwh(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}</div>
-              <div class="muted">${this.rangeLabel()} · average ${fmtKwh(avg)} ${unitWord}</div>`}
+          : html`<div class="big">${fmtKwh(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}${share != null ? html`<span class="cost">${share}% of electricity</span>` : nothing}</div>
+              <div class="muted">${devName ? `${devName} · ` : ""}${this.rangeLabel()} · average ${fmtKwh(avg)} ${unitWord}</div>`}
       </div>
-      <div class="bars ${this.kind}" @click=${(e: Event) => e.target === e.currentTarget && (this.sel = undefined)}>
+      <div class="bars ${isDev ? "device" : this.kind}" @click=${(e: Event) => e.target === e.currentTarget && (this.sel = undefined)}>
         ${[0.25, 0.5, 0.75].map((f) => html`<i class="gl" style="bottom:${f * 100}%"></i>`)}
         ${bars.map(
           (b, i) => html`<button
@@ -300,6 +345,37 @@ export class PageEnergy extends PageBase {
         display: flex;
         gap: 8px;
       }
+      .apps {
+        grid-column: 1 / -1;
+      }
+      .applist {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 320px));
+        gap: 10px 32px;
+        margin-top: 6px;
+      }
+      .app {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        grid-template-rows: auto auto;
+        column-gap: 10px;
+        align-items: center;
+        font-size: 16px;
+      }
+      .app ha-icon {
+        grid-row: 1 / 3;
+        color: var(--text-2);
+      }
+      .app.on ha-icon {
+        color: var(--cy);
+      }
+      .app b {
+        font-size: 18px;
+      }
+      .app .muted {
+        grid-column: 2 / 4;
+        font-size: 13px;
+      }
       .chead {
         flex-wrap: wrap;
         gap: 10px;
@@ -341,6 +417,10 @@ export class PageEnergy extends PageBase {
       .bars.gas {
         --c1: #00c8d4;
         --c2: #2a6bd1;
+      }
+      .bars.device {
+        --c1: #b94be0;
+        --c2: #ff2e97;
       }
       .gl {
         position: absolute;

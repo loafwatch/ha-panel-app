@@ -306,6 +306,16 @@ export class PageHome extends PageBase {
             : nothing}
         </div>
         ${powerWave(w)}
+        ${en.devices?.length
+          ? html`<div class="devs">
+              ${en.devices.map((d) => {
+                const dw = Number(this.st(d.power)?.state);
+                const on = dw >= 5;
+                return html`<span class="dev ${on ? "on" : ""}"><ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}
+                  <b>${isNaN(dw) ? "–" : on ? (dw >= 1000 ? (dw / 1000).toFixed(1) + " kW" : Math.round(dw) + " W") : "off"}</b></span>`;
+              })}
+            </div>`
+          : nothing}
       </div>
     `;
   }
@@ -701,6 +711,29 @@ export class PageHome extends PageBase {
       .energy .muted {
         font-size: 12px;
         line-height: 1.5;
+      }
+      .devs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        margin-top: 6px;
+        font-size: 13px;
+        color: var(--text-2);
+      }
+      .dev {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .dev ha-icon {
+        --mdc-icon-size: 16px;
+      }
+      .dev b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .dev.on ha-icon {
+        color: var(--cy);
       }
       .wave {
         display: block;
