@@ -108,7 +108,7 @@ export class PageCalendar extends PageBase {
         gap: var(--gap);
         align-items: start;
       }
-      @media (max-width: 900px) {
+      @container (max-width: 900px) {
         .layout {
           grid-template-columns: 1fr;
         }
@@ -201,7 +201,7 @@ export class PageCalendar extends PageBase {
         text-overflow: ellipsis;
         color: var(--text-2);
       }
-      @media (max-width: 700px) {
+      @container (max-width: 700px) {
         .mini {
           display: none;
         }

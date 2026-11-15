@@ -15,7 +15,8 @@ async function boot() {
   if (!pinned) {
     try {
       const base = here.origin + here.pathname;
-      const latest = (await (await fetch(base, { cache: "no-cache" })).text()).match(RE)?.[1];
+      // A unique query bypasses both the HTTP cache and Home Assistant's service worker.
+      const latest = (await (await fetch(`${base}?hpacheck=${Date.now()}`, { cache: "no-store" })).text()).match(RE)?.[1];
       if (latest && latest !== VERSION) {
         console.info(`ha-panel-app: loading ${latest} (cached copy was ${VERSION})`);
         await import(/* @vite-ignore */ `${base}?hpa=${encodeURIComponent(latest)}`);

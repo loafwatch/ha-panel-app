@@ -113,7 +113,7 @@ export class PageLights extends PageBase {
         gap: var(--gap);
         align-items: start;
       }
-      @media (max-width: 800px) {
+      @container (max-width: 800px) {
         .layout {
           grid-template-columns: 1fr;
         }

@@ -83,7 +83,7 @@ export class PageWeather extends PageBase {
         gap: var(--gap);
         margin-bottom: var(--gap);
       }
-      @media (max-width: 900px) {
+      @container (max-width: 900px) {
         .top {
           grid-template-columns: 1fr;
         }
@@ -225,14 +225,15 @@ export class PageWeather extends PageBase {
       }
       .fx-cloud .fx,
       .fx-fog .fx {
-        background: radial-gradient(ellipse at 20% 30%, rgba(160, 150, 180, 0.35), transparent 50%),
-          radial-gradient(ellipse at 70% 60%, rgba(160, 150, 180, 0.3), transparent 50%);
-        background-size: 200% 100%;
-        animation: drift 30s linear infinite;
+        inset: -20% -40%;
+        background: radial-gradient(ellipse 35% 30% at 25% 35%, rgba(160, 150, 185, 0.45), transparent 70%),
+          radial-gradient(ellipse 30% 25% at 70% 60%, rgba(160, 150, 185, 0.35), transparent 70%);
+        filter: blur(18px);
+        animation: drift 24s ease-in-out infinite alternate;
       }
       @keyframes drift {
         to {
-          background-position: 200% 0;
+          transform: translateX(18%);
         }
       }
       .fx-snow .fx {

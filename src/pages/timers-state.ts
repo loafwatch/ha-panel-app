@@ -15,7 +15,8 @@ export function timersOf(hass: HomeAssistant, sensor: string): Timer[] {
     .filter((t) => t.status === "running" && t.expires)
     .map((t) => {
       const exp = new Date(t.expires).getTime();
-      const created = t.created ? new Date(t.created).getTime() : NaN;
+      const c0 = t.created_at ?? t.created;
+      const created = c0 ? new Date(c0).getTime() : NaN;
       const total = Number(t.duration_seconds) || (isNaN(created) ? 0 : (exp - created) / 1000);
       const name = String(t.name || "Timer").replace(/ timer$/i, "");
       return { id: String(t.id), name: name.charAt(0).toUpperCase() + name.slice(1), left: (exp - now) / 1000, total };

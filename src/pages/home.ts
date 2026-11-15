@@ -329,16 +329,20 @@ export class PageHome extends PageBase {
         gap: var(--gap);
         align-items: start;
       }
-      @media (max-width: 1000px) {
+      @container (max-width: 1000px) {
         .grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
         .col:nth-child(3) {
           grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          align-items: start;
         }
       }
-      @media (max-width: 640px) {
-        .grid {
+      @container (max-width: 640px) {
+        .grid,
+        .col:nth-child(3) {
           grid-template-columns: 1fr;
         }
       }

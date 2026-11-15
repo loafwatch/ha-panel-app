@@ -78,12 +78,17 @@ export const shared = css`
     color: var(--text-2);
   }
   .page {
+    container-type: inline-size;
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 24px 28px 110px;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+  .page::-webkit-scrollbar {
+    display: none;
   }
   .page-title {
     font-size: 28px;
