@@ -58,7 +58,6 @@ export class HaPanelApp extends LitElement {
   private toastTimer?: number;
   private lastPageValue?: string;
   private scrollEnd?: number;
-  private drag?: { x: number; y: number; left: number; dx: number; lock?: "x" | "y"; t: number };
 
   private get config(): PanelConfig {
     return this.panel?.config ?? {};
@@ -123,53 +122,6 @@ export class HaPanelApp extends LitElement {
     }, 80);
   };
 
-  // ---------- two-finger swipe ----------
-  // One page per gesture: two fingers moving sideways flips to the next or
-  // previous page, and nothing else happens until the fingers lift.
-
-  private get twoFinger() {
-    return this.config.swipe_fingers === 2;
-  }
-
-  private mid(e: TouchEvent) {
-    const a = e.touches[0];
-    const b = e.touches[1];
-    return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
-  }
-
-  private onTouchStart = (e: TouchEvent) => {
-    if (!this.twoFinger) return;
-    if (e.touches.length === 2) {
-      const m = this.mid(e);
-      this.drag = { x: m.x, y: m.y, left: 0, dx: 0, t: performance.now() };
-    } else if (e.touches.length > 2) {
-      this.drag = undefined;
-    }
-  };
-
-  private onTouchMove = (e: TouchEvent) => {
-    const d = this.drag;
-    if (!d || e.touches.length !== 2) return;
-    const m = this.mid(e);
-    const dx = m.x - d.x;
-    const dy = m.y - d.y;
-    if (!d.lock) {
-      if (Math.hypot(dx, dy) < 14) return;
-      d.lock = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
-    }
-    if (d.lock !== "x") return;
-    e.preventDefault();
-    if (d.dx) return; // already flipped for this gesture
-    if (Math.abs(dx) < 60) return;
-    d.dx = dx;
-    const to = Math.max(0, Math.min(this.pages.length - 1, this.index + (dx < 0 ? 1 : -1)));
-    if (to !== this.index) this.goTo(this.pages[to].id);
-  };
-
-  private onTouchEnd = (e: TouchEvent) => {
-    if (e.touches.length === 0) this.drag = undefined;
-  };
-
   /** An automation can set the page entity to e.g. "music" or "photos". A suffix after "|"
    *  (e.g. "home|1731667200") lets the same page be requested twice in a row. */
   private syncPageEntity() {
@@ -225,14 +177,7 @@ export class HaPanelApp extends LitElement {
     if (!this.hass) return html`<div class="loading">Connecting…</div>`;
     const pages = this.pages;
     return html`
-      <div
-        class="pager ${this.twoFinger ? "two" : ""}"
-        @scroll=${this.onScroll}
-        @touchstart=${{ handleEvent: this.onTouchStart, passive: true }}
-        @touchmove=${{ handleEvent: this.onTouchMove, passive: false }}
-        @touchend=${{ handleEvent: this.onTouchEnd, passive: true }}
-        @touchcancel=${{ handleEvent: this.onTouchEnd, passive: true }}
-      >
+      <div class="pager" @scroll=${this.onScroll}>
         ${pages.map((p, i) => {
           const tag = unsafeStatic(p.tag);
           return html`<section class="slot" aria-label=${p.label}>
@@ -283,11 +228,6 @@ export class HaPanelApp extends LitElement {
         scrollbar-width: none;
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
-      }
-      /* two-finger mode: one finger never moves between pages */
-      .pager.two {
-        overflow-x: hidden;
-        touch-action: pan-y;
       }
       .pager::-webkit-scrollbar {
         display: none;
