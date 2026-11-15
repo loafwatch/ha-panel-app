@@ -134,9 +134,36 @@ export class PageEnergy extends PageBase {
         }
         return m;
       };
+      const now = Date.now();
+      // The slot containing "now" lags by up to an hour in the hourly statistics, so top it up
+      // from the five-minute statistics, which are only a few minutes behind.
+      const now0 = Date.now();
+      let cur = -1;
+      for (let i = 0; i < starts.length; i++) if (starts[i] <= now0) cur = i;
+      if (cur >= 0) {
+        try {
+          const r5 = await this.hass.callWS<Record<string, { start: number | string; change?: number | null }[]>>({
+            type: "recorder/statistics_during_period",
+            start_time: new Date(starts[cur]).toISOString(),
+            statistic_ids: ids,
+            period: "5minute",
+            types: ["change"],
+          });
+          for (const id of ids) {
+            const rows = r5[id];
+            if (!rows?.length) continue;
+            const sum = rows.reduce((acc, row) => acc + (row.change ?? 0), 0);
+            // keep whichever is larger: hourly stats can be partially compiled for this slot
+            const prev = r[id]?.filter((row) => (typeof row.start === "number" ? row.start : Date.parse(row.start)) >= starts[cur] - 60_000) ?? [];
+            const hourly = prev.reduce((acc, row) => acc + (row.change ?? 0), 0);
+            r[id] = [...(r[id] ?? []).filter((row) => !prev.includes(row)), { start: starts[cur], change: Math.max(sum, hourly) }];
+          }
+        } catch (e) {
+          console.warn("ha-panel-app: 5-minute statistics", e);
+        }
+      }
       const kwh = pick(src.energy);
       const cost = src.cost ? pick(src.cost) : undefined;
-      const now = Date.now();
       const partMaps = devIds.map((id) => (id ? pick(id) : undefined));
       this.bars = starts.map((t, i) => {
         const parts = partMaps.map((m) => Math.max(0, m?.get(i) ?? 0));
