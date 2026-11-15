@@ -4,11 +4,12 @@ import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
 
 type Range = "day" | "week" | "month" | "year";
-/** "electricity", "gas" or "dev:<index into energy.devices>" */
-type Kind = string;
+type Kind = "electricity" | "gas";
 interface Bar {
   t: number;
   kwh: number;
+  /** the highlighted device's share of this slot (kWh) */
+  hi?: number;
   cost?: number;
   future: boolean;
 }
@@ -30,8 +31,8 @@ export class PageEnergy extends PageBase {
   @state() private bars: Bar[] = [];
   @state() private sel?: number;
   @state() private sources: Partial<Record<Kind, Source>> = {};
-  /** Electricity kWh per slot while a device is selected, for its share of the total. */
-  @state() private elec: number[] = [];
+  /** Index of the appliance cross-highlighted on the chart, if any. */
+  @state() private dev?: number;
   private loadedKey = "";
   private loadedAt = 0;
   private prefsLoaded = false;
@@ -49,7 +50,7 @@ export class PageEnergy extends PageBase {
       this.loadPrefs();
       return;
     }
-    const key = this.range + "|" + this.kind;
+    const key = this.loadKey();
     if (key !== this.loadedKey || Date.now() - this.loadedAt > 5 * 60 * 1000) this.load();
   }
 
@@ -96,25 +97,19 @@ export class PageEnergy extends PageBase {
     }
   }
 
-  private source(kind: Kind): Source | undefined {
-    const m = kind.match(/^dev:(\d+)$/);
-    if (m) {
-      const d = this.config.energy?.devices?.[+m[1]];
-      return d?.energy ? { energy: d.energy } : undefined;
-    }
-    return this.sources[kind];
+  private loadKey() {
+    return this.range + "|" + this.kind + "|" + (this.dev ?? "");
   }
 
   private async load() {
-    const src = this.source(this.kind);
-    const key = this.range + "|" + this.kind;
+    const src = this.sources[this.kind];
+    const key = this.loadKey();
     this.loadedKey = key;
     this.loadedAt = Date.now();
     if (!src) return;
     const { start, starts, period } = this.slots();
-    const isDev = this.kind.startsWith("dev:");
-    const elecId = isDev ? this.sources.electricity?.energy : undefined;
-    const ids = [src.energy, src.cost, elecId].filter(Boolean) as string[];
+    const devId = this.kind === "electricity" && this.dev != null ? this.config.energy?.devices?.[this.dev]?.energy : undefined;
+    const ids = [src.energy, src.cost, devId].filter(Boolean) as string[];
     try {
       const r = await this.hass.callWS<Record<string, { start: number | string; change?: number | null }[]>>({
         type: "recorder/statistics_during_period",
@@ -123,7 +118,7 @@ export class PageEnergy extends PageBase {
         period,
         types: ["change"],
       });
-      if (key !== this.range + "|" + this.kind) return; // user moved on
+      if (key !== this.loadKey()) return; // user moved on
       const pick = (id?: string) => {
         const m = new Map<number, number>();
         if (!id) return m;
@@ -139,9 +134,8 @@ export class PageEnergy extends PageBase {
       const kwh = pick(src.energy);
       const cost = src.cost ? pick(src.cost) : undefined;
       const now = Date.now();
-      this.bars = starts.map((t, i) => ({ t, kwh: Math.max(0, kwh.get(i) ?? 0), cost: cost?.get(i), future: t > now }));
-      const el = elecId ? pick(elecId) : undefined;
-      this.elec = el ? starts.map((_, i) => Math.max(0, el.get(i) ?? 0)) : [];
+      const hi = devId ? pick(devId) : undefined;
+      this.bars = starts.map((t, i) => ({ t, kwh: Math.max(0, kwh.get(i) ?? 0), hi: hi ? Math.max(0, hi.get(i) ?? 0) : undefined, cost: cost?.get(i), future: t > now }));
       this.sel = undefined;
     } catch (e) {
       console.warn("ha-panel-app: energy statistics", e);
@@ -198,13 +192,25 @@ export class PageEnergy extends PageBase {
               ${(["electricity", "gas"] as Kind[])
                 .filter((k) => this.sources[k])
                 .map(
-                  (k) => html`<button class="chip ${this.kind === k ? "on" : ""}" @click=${() => (this.kind = k)}>
+                  (k) => html`<button
+                    class="chip ${this.kind === k ? "on" : ""}"
+                    @click=${() => {
+                      this.kind = k;
+                      if (k === "gas") this.dev = undefined;
+                    }}
+                  >
                     <ha-icon icon=${k === "gas" ? "mdi:fire" : "mdi:flash"}></ha-icon>${k === "gas" ? "Gas" : "Electricity"}
                   </button>`,
                 )}
               ${(en.devices ?? []).map((d, i) =>
                 d.energy
-                  ? html`<button class="chip ${this.kind === "dev:" + i ? "on" : ""}" @click=${() => (this.kind = "dev:" + i)}>
+                  ? html`<button
+                      class="chip dev ${this.dev === i ? "on" : ""}"
+                      @click=${() => {
+                        this.dev = this.dev === i ? undefined : i;
+                        if (this.dev != null) this.kind = "electricity";
+                      }}
+                    >
                       <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}
                     </button>`
                   : nothing,
@@ -235,19 +241,19 @@ export class PageEnergy extends PageBase {
     const withData = past.slice(0, -1).filter((b) => b.kwh > 0);
     const avg = withData.length ? withData.reduce((s, b) => s + b.kwh, 0) / withData.length : 0;
     const unitWord = this.range === "day" ? "an hour" : this.range === "year" ? "a month" : "a day";
-    const isDev = this.kind.startsWith("dev:");
-    const elecTotal = isDev ? this.elec.filter((_, i) => !bars[i]?.future).reduce((s, v) => s + v, 0) : 0;
-    const share = isDev && elecTotal > 0 ? Math.round((total / elecTotal) * 100) : undefined;
-    const devName = isDev ? this.config.energy?.devices?.[+this.kind.slice(4)]?.name : undefined;
+    const dev = this.dev != null ? this.config.energy?.devices?.[this.dev] : undefined;
+    const hiOn = !!dev && bars.some((b) => b.hi != null);
+    const hiTotal = hiOn ? past.reduce((s, b) => s + (b.hi ?? 0), 0) : 0;
+    const share = hiOn && total > 0 ? Math.round((hiTotal / total) * 100) : undefined;
     return html`
       <div class="sum">
         ${sel
-          ? html`<div class="big">${fmtKwh(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}</div>
+          ? html`<div class="big">${fmtKwh(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}${hiOn && sel.hi != null ? html`<span class="hi">${dev!.name} ${fmtKwh(sel.hi)}${sel.kwh > 0 ? ` · ${Math.round((sel.hi / sel.kwh) * 100)}%` : ""}</span>` : nothing}</div>
               <div class="muted">${this.slotLabel(sel.t, true)}</div>`
-          : html`<div class="big">${fmtKwh(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}${share != null ? html`<span class="cost">${share}% of electricity</span>` : nothing}</div>
-              <div class="muted">${devName ? `${devName} · ` : ""}${this.rangeLabel()} · average ${fmtKwh(avg)} ${unitWord}</div>`}
+          : html`<div class="big">${fmtKwh(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}${hiOn ? html`<span class="hi">${dev!.name} ${fmtKwh(hiTotal)} · ${share ?? 0}%</span>` : nothing}</div>
+              <div class="muted">${this.rangeLabel()} · average ${fmtKwh(avg)} ${unitWord}</div>`}
       </div>
-      <div class="bars ${isDev ? "device" : this.kind}" @click=${(e: Event) => e.target === e.currentTarget && (this.sel = undefined)}>
+      <div class="bars ${this.kind} ${hiOn ? "hilite" : ""}" @click=${(e: Event) => e.target === e.currentTarget && (this.sel = undefined)}>
         ${[0.25, 0.5, 0.75].map((f) => html`<i class="gl" style="bottom:${f * 100}%"></i>`)}
         ${bars.map(
           (b, i) => html`<button
@@ -256,7 +262,8 @@ export class PageEnergy extends PageBase {
             @click=${() => (this.sel = this.sel === i ? undefined : i)}
             aria-label=${this.slotLabel(b.t, true) + " " + fmtKwh(b.kwh)}
           >
-            <span style="height:${b.future ? 0 : Math.max(b.kwh > 0 ? 2 : 0, (b.kwh / max) * 100)}%"></span>
+            <span class="tot" style="height:${b.future ? 0 : Math.max(b.kwh > 0 ? 2 : 0, (b.kwh / max) * 100)}%"></span>
+            <span class="part" style="height:${b.future || !hiOn ? 0 : ((b.hi ?? 0) / max) * 100}%"></span>
           </button>`,
         )}
       </div>
@@ -418,9 +425,15 @@ export class PageEnergy extends PageBase {
         --c1: #00c8d4;
         --c2: #2a6bd1;
       }
-      .bars.device {
-        --c1: #b94be0;
-        --c2: #ff2e97;
+      .hi {
+        font-size: 18px;
+        color: var(--cy);
+        font-weight: 600;
+      }
+      .chip.dev.on {
+        background: var(--cy);
+        border-color: var(--cy);
+        color: #04262a;
       }
       .gl {
         position: absolute;
@@ -432,6 +445,7 @@ export class PageEnergy extends PageBase {
       .bar {
         flex: 1;
         height: 100%;
+        position: relative;
         display: flex;
         align-items: flex-end;
         background: none;
@@ -446,10 +460,26 @@ export class PageEnergy extends PageBase {
         background: linear-gradient(180deg, var(--c1), var(--c2));
         transition: height 0.35s ease, opacity 0.2s;
       }
+      .bar .part {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-radius: 6px 6px 2px 2px;
+        background: var(--cy);
+        box-shadow: 0 0 10px rgba(0, 200, 212, 0.45);
+        transition: height 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      .bars.hilite .tot {
+        opacity: 0.28;
+      }
       .bar.dim span {
         opacity: 0.3;
       }
-      .bar.sel span {
+      .bar.dim .part {
+        opacity: 0.4;
+      }
+      .bar.sel .tot {
         box-shadow: 0 0 0 2px var(--c1);
       }
       .bar.future {
