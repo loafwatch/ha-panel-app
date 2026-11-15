@@ -6,6 +6,10 @@ It runs as a Home Assistant **custom panel**, so it uses Home Assistant's own lo
 
 > Status: early development.
 
+Pages: Home (dashboard tiles), Music (Music Assistant), Calendar, Weather, Lights, Timers (View Assist), Energy and Media. Swipe between pages or use the dock; tiles on Home open their page. A photo screensaver starts when idle, and a voice-assistant overlay appears when the assistant is listening.
+
+See [`docs/config.example.yaml`](docs/config.example.yaml) for every option.
+
 ## Install
 
 1. In Home Assistant, open **Settings > Marketplace**, add this repository as a custom repository of type **Dashboard**, and download it.

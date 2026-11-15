@@ -1,6 +1,6 @@
 {
   "name": "ha-panel-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A tablet-friendly panel app for Home Assistant",
   "scripts": {
     "build": "tsc --noEmit && vite build",

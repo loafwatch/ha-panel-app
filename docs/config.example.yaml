@@ -1,0 +1,54 @@
+# Example panel config. Every value here is made up; use your own entities.
+panel_custom:
+  - name: ha-panel-app
+    url_path: panel
+    sidebar_title: Panel
+    sidebar_icon: mdi:tablet-dashboard
+    module_url: /local/community/ha-panel-app/ha-panel-app.js
+    config:
+      page_entity: input_text.panel_page      # automations set this to e.g. "music" or "photos"
+      idle_seconds: 120                       # photo screensaver after 2 minutes untouched
+      weather: weather.home
+      calendars: [calendar.family]
+      todo_lists:
+        - { name: Reminders, entity: todo.reminders, icon: "mdi:bell-outline" }
+        - { name: Shopping, entity: todo.shopping, icon: "mdi:cart-outline" }
+      music:
+        room_entity: input_select.music_room  # optional, shared with voice automations
+        rooms:
+          - name: Room A
+            player: media_player.room_a_music        # Music Assistant player
+            device: media_player.room_a_speaker      # underlying device (optional)
+            favorite_button: button.room_a_favourite_current_song
+      lights:
+        - name: Room A
+          entity: light.room_a
+          members: [light.room_a_ceiling, light.room_a_lamp]
+          scenes:
+            - { name: Bright, entity: scene.room_a_bright, icon: "mdi:white-balance-sunny" }
+      scenes:
+        - { name: Bright, entity: scene.room_a_bright, icon: "mdi:white-balance-sunny" }
+      timers:
+        sensor: sensor.example_tablet          # View Assist device sensor
+        alarm_switch: switch.example_tablet_alarm
+        add_minute_script: script.example_timer_add_minute
+        quick: [1, 3, 5, 10, 15]
+      energy:
+        power: sensor.example_power
+        rate: sensor.example_rate
+        costs:
+          - { name: Electricity, entity: sensor.example_electricity_cost, icon: "mdi:flash" }
+      bins:
+        due_entity: input_boolean.bin_night
+        out_entity: input_boolean.bin_out
+        collections:
+          - { name: Green bin, entity: sensor.example_green_bin, color: "#3ddc84" }
+      voice:
+        satellite: assist_satellite.example_tablet
+        stt: sensor.example_tablet_stt
+        tts: sensor.example_tablet_tts
+      photos:
+        url: "https://photos.example.com/kiosk"
+      media:
+        url: "https://media.example.com/web/"
+        title: Media
