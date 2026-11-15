@@ -13,6 +13,7 @@ import "./pages/lights";
 import "./pages/timers";
 import "./pages/energy";
 import "./pages/media";
+import "./pages/transit";
 import "./components/voice";
 import "./components/screensaver";
 
@@ -35,6 +36,7 @@ const PAGES: PageDef[] = [
   { id: "lights", label: "Lights", icon: "mdi:lightbulb-group", tag: "panel-lights", needs: (c) => !!c.lights?.length },
   { id: "timers", label: "Timers", icon: "mdi:timer-outline", tag: "panel-timers", needs: (c) => !!c.timers },
   { id: "energy", label: "Energy", icon: "mdi:lightning-bolt", tag: "panel-energy", needs: (c) => !!c.energy },
+  { id: "transit", label: "Tram", icon: "mdi:tram", tag: "panel-transit", needs: (c) => !!c.transit?.stops?.length },
   { id: "media", label: "Media", icon: "mdi:play-box-multiple", tag: "panel-media", needs: (c) => !!c.media?.url },
 ];
 

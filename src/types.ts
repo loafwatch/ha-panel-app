@@ -107,10 +107,37 @@ export interface PanelConfig {
 
   photos?: { url: string };
   media?: { url: string; title?: string };
+  transit?: TransitConfig;
+}
+
+/** One departure row as published by the board sensor's `departures` attribute. */
+export interface TransitDeparture {
+  line?: string;
+  to: string;
+  /** "14:51", "5 min" or "Due" */
+  time: string;
+  live?: boolean;
+}
+
+/** A tram or bus line drawn as a strip map between two termini A and B. */
+export interface TransitConfig {
+  title?: string;
+  icon?: string;
+  /** CSS colour of the line */
+  color?: string;
+  /** Terminus A: name and the sensor whose `departures` attribute lists departures from it. */
+  a: { name: string; sensor: string };
+  b: { name: string; sensor: string };
+  /** Stops from A to B with timetable run times: `ab` = minutes after leaving A, `ba` = minutes after leaving B. */
+  stops: { name: string; short?: string; ab: number; ba: number; major?: boolean }[];
+  /** Stop to highlight (defaults to A). */
+  home?: string;
+  /** Fallback minutes between departures when the board lists only one. */
+  headway_min?: number;
 }
 
 export interface PanelInfo {
   config: PanelConfig;
 }
 
-export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media";
+export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit";

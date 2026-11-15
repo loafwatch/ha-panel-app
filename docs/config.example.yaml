@@ -52,3 +52,16 @@ panel_custom:
       media:
         url: "https://media.example.com/web/"
         title: Media
+      # Optional: a tram/bus line as a strip map. Two sensors list departures from each end
+      # (attribute `departures`: [{to, time, live}]); run times come from the timetable.
+      transit:
+        title: Tram line
+        color: "#ffcf2e"
+        a: { name: Terminus A, sensor: sensor.tram_board_a }
+        b: { name: Terminus B, sensor: sensor.tram_board_b }
+        home: Terminus A
+        headway_min: 12
+        stops:          # ab = minutes after leaving A, ba = minutes after leaving B
+          - { name: Terminus A, ab: 0, ba: 20 }
+          - { name: Middle stop, ab: 10, ba: 10, major: true }
+          - { name: Terminus B, ab: 20, ba: 0 }
