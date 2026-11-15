@@ -23,26 +23,32 @@ export class PageTimers extends PageBase {
     if (!t) return html`<div class="page"><div class="empty">Timers aren't configured.</div></div>`;
     const list = timersOf(this.hass, t.sensor);
     const ringing = isOn(this.st(t.alarm_switch));
+    // one timer fills the page, two split it, more share a grid
+    const n = list.length;
+    const cols = n <= 3 ? Math.max(1, n) : n <= 4 ? 2 : n <= 6 ? 3 : 4;
+    const rows = Math.max(1, Math.ceil(n / cols));
     return html`
-      <div class="page">
+      <div class="page fill">
         ${ringing
           ? html`<button class="ring" @click=${() => call(this.hass, "switch", "turn_off", { entity_id: t.alarm_switch })}>
               <ha-icon icon="mdi:alarm-off"></ha-icon>Stop alarm
             </button>`
           : nothing}
-        <div class="timers">
+        <div class="timers" style="grid-template-columns:repeat(${cols},minmax(0,1fr));grid-template-rows:repeat(${rows},minmax(0,1fr))">
           ${list.length
             ? list.map((x) => {
                 const frac = x.total > 0 ? Math.max(0, Math.min(1, x.left / x.total)) : 1;
                 const C = 2 * Math.PI * 92;
                 return html`<div class="tile timer ${x.left < 10 ? "soon" : ""}">
-                  <svg viewBox="0 0 200 200" class="ringsvg">
-                    <circle cx="100" cy="100" r="92" class="track"></circle>
-                    <circle cx="100" cy="100" r="92" class="prog" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - frac)}"></circle>
-                  </svg>
-                  <div class="inner">
-                    <div class="left">${fmtCountdown(x.left)}</div>
-                    <div class="tname muted">${x.name}</div>
+                  <div class="ringwrap">
+                    <svg viewBox="0 0 200 200" class="ringsvg">
+                      <circle cx="100" cy="100" r="92" class="track"></circle>
+                      <circle cx="100" cy="100" r="92" class="prog" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - frac)}"></circle>
+                    </svg>
+                    <div class="inner">
+                      <div class="left">${fmtCountdown(x.left)}</div>
+                      <div class="tname muted">${x.name}</div>
+                    </div>
                   </div>
                   <div class="tbtns">
                     ${t.add_minute_script
@@ -88,22 +94,38 @@ export class PageTimers extends PageBase {
           box-shadow: 0 0 0 6px rgba(255, 46, 151, 0.4), 0 0 30px var(--pk);
         }
       }
+      .page.fill {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+      }
       .timers {
+        flex: 1;
+        min-height: 0;
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: var(--gap);
       }
       .timer {
+        container-type: size;
         display: flex;
         flex-direction: column;
         align-items: center;
+        justify-content: center;
+        min-height: 0;
+        padding: 16px;
+      }
+      .ringwrap {
         position: relative;
-        padding: 22px;
+        width: min(88cqw, 100cqh - 90px);
+        aspect-ratio: 1;
+        flex: none;
       }
       .ringsvg {
-        width: 220px;
-        height: 220px;
+        width: 100%;
+        height: 100%;
         transform: rotate(-90deg);
+        display: block;
       }
       .track,
       .prog {
@@ -124,29 +146,38 @@ export class PageTimers extends PageBase {
       }
       .inner {
         position: absolute;
-        top: 22px;
-        height: 220px;
+        inset: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
       }
       .left {
-        font-size: 50px;
+        font-size: clamp(30px, 19cqmin, 120px);
         font-weight: 600;
+        line-height: 1;
         font-variant-numeric: tabular-nums;
       }
       .tname {
-        font-size: 16px;
-        margin-top: 4px;
+        font-size: clamp(13px, 5cqmin, 26px);
+        margin-top: 0.4em;
+        max-width: 70%;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .tbtns {
         display: flex;
         gap: 10px;
-        margin-top: 16px;
+        margin-top: 14px;
+        flex: none;
       }
       .none {
         grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
         text-align: center;
         padding: 40px 20px;
         font-size: 20px;
@@ -163,9 +194,11 @@ export class PageTimers extends PageBase {
         margin-top: 6px;
       }
       .start {
-        margin-top: 26px;
+        margin-top: 18px;
+        flex: none;
       }
       .quick {
+        flex: none;
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
         gap: 12px;
@@ -174,7 +207,7 @@ export class PageTimers extends PageBase {
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 20px 0;
+        padding: 12px 0;
         border-radius: var(--radius);
         border: 1px solid var(--line);
         background: var(--tile);
@@ -184,7 +217,7 @@ export class PageTimers extends PageBase {
         font-family: var(--font);
       }
       .q b {
-        font-size: 34px;
+        font-size: 28px;
       }
       .q span {
         font-size: 13px;
