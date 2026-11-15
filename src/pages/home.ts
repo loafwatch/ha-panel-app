@@ -1,5 +1,5 @@
 import { reg } from "../registry";
-import { css, html, nothing } from "lit";
+import { css, html, nothing, svg } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
 import { activeRoom, roomState } from "./music-state";
@@ -305,7 +305,7 @@ export class PageHome extends PageBase {
                 <div class="muted">today · ${costs.map((c) => `${c.name} £${c.v.toFixed(2)}`).join(" · ")}</div></div>`
             : nothing}
         </div>
-        <div class="meter"><span style="width:${Math.min(100, (w / 4000) * 100)}%"></span></div>
+        ${powerWave(w)}
       </div>
     `;
   }
@@ -702,12 +702,16 @@ export class PageHome extends PageBase {
         font-size: 12px;
         line-height: 1.5;
       }
-      .meter {
-        margin-top: 14px;
-        height: 6px;
-        border-radius: 3px;
-        background: rgba(127, 127, 127, 0.2);
+      .wave {
+        display: block;
+        width: 100%;
+        height: 44px;
+        margin-top: 10px;
         overflow: hidden;
+        color: var(--accent);
+      }
+      .wave .glow {
+        filter: drop-shadow(0 0 3px currentColor);
       }
       .meter span {
         display: block;
@@ -739,6 +743,32 @@ export class PageHome extends PageBase {
       }
     `,
   ];
+}
+
+/** A scrolling sine wave whose height and speed follow the current power draw. */
+function powerWave(watts: number) {
+  const f = Math.min(Math.max(0, watts), 4000) / 4000;
+  const amp = 3 + f * 13;
+  const dur = 2.6 - f * 1.9;
+  const P = 60;
+  const mk = (a: number, ph: number) => {
+    let d = "";
+    for (let x = 0; x <= 360; x += 3) {
+      const y = 20 + a * (0.75 * Math.sin((2 * Math.PI * (x + ph)) / P) + 0.25 * Math.sin((4 * Math.PI * (x + ph)) / P));
+      d += (x ? "L" : "M") + x + " " + y.toFixed(2);
+    }
+    return d;
+  };
+  return svg`<svg class="wave" viewBox="0 0 300 40" preserveAspectRatio="none">
+    <g>
+      <path d=${mk(amp * 0.55, 15)} fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.5" />
+      <animateTransform attributeName="transform" type="translate" from="0 0" to="-${P} 0" dur="${(dur * 1.6).toFixed(2)}s" repeatCount="indefinite" />
+    </g>
+    <g class="glow">
+      <path d=${mk(amp, 0)} fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+      <animateTransform attributeName="transform" type="translate" from="0 0" to="-${P} 0" dur="${dur.toFixed(2)}s" repeatCount="indefinite" />
+    </g>
+  </svg>`;
 }
 
 reg("panel-home", PageHome);
