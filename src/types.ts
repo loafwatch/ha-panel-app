@@ -134,6 +134,8 @@ export interface TransitConfig {
   home?: string;
   /** Fallback minutes between departures when the board lists only one. */
   headway_min?: number;
+  /** Walking time from the house to terminus A, in minutes; drives the "leave now?" advice. */
+  walk_min?: number;
 }
 
 export interface PanelInfo {

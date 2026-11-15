@@ -1,6 +1,7 @@
 import { reg } from "../registry";
 import { css, html, nothing, svg } from "lit";
 import { PageBase } from "./base";
+import { fmtDay, fmtTime } from "../util";
 import type { TransitConfig, TransitDeparture } from "../types";
 
 /**
@@ -21,6 +22,8 @@ interface Vehicle {
   stop: string; // nearest stop name
   label: string;
   live: boolean;
+  /** Estimated arrival at the far terminus (ms). */
+  eta?: number;
 }
 
 export class PageTransit extends PageBase {
@@ -92,6 +95,7 @@ export class PageTransit extends PageBase {
         stop: atStop ? atStop.name : `${a.name} → ${b.name}`,
         label: atStop ? `at ${atStop.name}` : `between ${a.name} and ${b.name}`,
         live: s.live,
+        eta: s.at + total * 60_000,
       });
     }
     return out;
@@ -111,27 +115,59 @@ export class PageTransit extends PageBase {
     const stale = !updated || now - updated.getTime() > 15 * 60_000;
     const anyLive = depsA.some((d) => d.live) || depsB.some((d) => d.live);
     const home = t.home ?? t.a.name;
+    const walk = t.walk_min ?? 0;
+    // estimated time the next tram reaches A: the matching run from B plus the run time
+    const runBA = t.stops[0].ba;
+    const arrivalsA = this.vehicles("ba", depsB).map((v) => v.eta).filter((x): x is number => x != null);
+    const dwell = (dep: Dep) => {
+      const arr = arrivalsA.filter((x) => x <= dep.at.getTime() + 60_000 && x > dep.at.getTime() - 25 * 60_000).sort((p, q) => q - p)[0];
+      return arr ? new Date(arr) : undefined;
+    };
+    const catchable = walk ? nextA.find((d) => d.at.getTime() - now >= walk * 60_000) : undefined;
+    const first = nextA[0];
+    const firstArr = first ? dwell(first) : undefined;
     return html`
       <div class="page" style="--line:${t.color ?? "var(--accent)"}">
         <div class="top">
           <div class="tile next">
-            <div class="label"><ha-icon icon=${t.icon ?? "mdi:tram"}></ha-icon>Next from ${t.a.name}</div>
-            ${nextA.length
+            <div class="label"><ha-icon icon=${t.icon ?? "mdi:tram"}></ha-icon>Next tram from ${t.a.name}</div>
+            ${first
               ? html`<div class="first">
-                    <span class="mins">${mins(nextA[0].at)}</span>
-                    <span class="sub">to ${nextA[0].to}${nextA[0].live ? html` <i class="live">live</i>` : nothing}</span>
+                    <span class="mins">${hm(first.at)}</span>
+                    <span class="sub"><b>leaves in ${minsWord(first.at)}</b><br />to ${first.to}${first.live ? html` <i class="live">live</i>` : nothing}</span>
                   </div>
-                  <div class="more">${nextA.slice(1).map((d) => html`<span>${hm(d.at)}${d.live ? html`<i class="live">live</i>` : nothing}</span>`)}</div>`
+                  <div class="muted plat">
+                    ${firstArr
+                      ? html`Due on the platform from about ${hm(firstArr)} (${Math.max(0, Math.round((first.at.getTime() - firstArr.getTime()) / 60_000))} min turnaround, estimated)`
+                      : html`Platform time unknown until the previous tram's run can be matched`}
+                  </div>
+                  ${walk
+                    ? catchable
+                      ? html`<div class="verdict ${catchable === first ? "go" : "wait"}">
+                          <ha-icon icon=${catchable === first ? "mdi:walk" : "mdi:clock-alert-outline"}></ha-icon>
+                          <span>${catchable === first
+                            ? html`Leave now and you'll make the ${hm(first.at)} with ${Math.round((first.at.getTime() - now) / 60_000) - walk} min to spare`
+                            : html`Too late for the ${hm(first.at)}. Set off by <b>${hm(new Date(catchable.at.getTime() - walk * 60_000))}</b> for the ${hm(catchable.at)}`}</span>
+                        </div>`
+                      : html`<div class="verdict wait"><ha-icon icon="mdi:clock-alert-outline"></ha-icon><span>None of the listed trams can be reached on foot in ${walk} min</span></div>`
+                    : nothing}
+                  <div class="more">Then ${nextA.slice(1).map((d) => html`<span>${hm(d.at)}${d.live ? html`<i class="live">live</i>` : nothing}</span>`)}</div>`
               : html`<div class="empty">${stale ? "Waiting for the departure board…" : "No more departures listed"}</div>`}
+          </div>
+          <div class="tile clock">
+            <div class="now">${fmtTime(new Date())}</div>
+            <div class="muted">${fmtDay(new Date())}</div>
+            ${walk ? html`<div class="muted walk"><ha-icon icon="mdi:walk"></ha-icon>${walk} min walk to ${t.a.name}</div>` : nothing}
           </div>
           <div class="tile next b">
             <div class="label"><ha-icon icon=${t.icon ?? "mdi:tram"}></ha-icon>Next from ${t.b.name}</div>
             ${nextB.length
               ? html`<div class="first">
-                    <span class="mins">${mins(nextB[0].at)}</span>
-                    <span class="sub">to ${nextB[0].to}${nextB[0].live ? html` <i class="live">live</i>` : nothing}</span>
+                    <span class="mins">${hm(nextB[0].at)}</span>
+                    <span class="sub"><b>leaves in ${minsWord(nextB[0].at)}</b><br />to ${nextB[0].to}${nextB[0].live ? html` <i class="live">live</i>` : nothing}</span>
                   </div>
-                  <div class="more">${nextB.slice(1).map((d) => html`<span>${hm(d.at)}</span>`)}</div>`
+                  <div class="more">Then ${nextB.slice(1).map((d) => html`<span>${hm(d.at)}</span>`)}</div>
+                  <div class="muted plat">About ${runBA} min to ${t.a.name}</div>`
               : html`<div class="empty">${stale ? "Waiting for the departure board…" : "No more departures listed"}</div>`}
           </div>
         </div>
@@ -185,7 +221,7 @@ export class PageTransit extends PageBase {
     css`
       .top {
         display: grid;
-        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1.5fr) minmax(200px, 0.8fr) minmax(0, 1fr);
         gap: var(--gap);
         margin-bottom: var(--gap);
       }
@@ -197,21 +233,91 @@ export class PageTransit extends PageBase {
       }
       .mins {
         font-size: 64px;
-        font-weight: 300;
+        font-weight: 500;
         line-height: 1;
+        font-variant-numeric: tabular-nums;
       }
       .next.b .mins {
         font-size: 44px;
       }
       .sub {
-        font-size: 18px;
+        font-size: 17px;
         color: var(--text-2);
+        line-height: 1.3;
+      }
+      .sub b {
+        color: var(--text);
+        font-size: 20px;
+      }
+      .plat {
+        font-size: 13px;
+        margin-top: 8px;
+      }
+      .verdict {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        font-size: 16px;
+        font-weight: 600;
+        background: var(--tile-2);
+        border-left: 4px solid var(--cy);
+      }
+      .verdict.go {
+        border-left-color: #3ddc84;
+      }
+      .verdict.wait {
+        border-left-color: var(--pk);
+      }
+      .verdict ha-icon {
+        flex: none;
+        color: var(--accent);
+      }
+      .verdict span {
+        display: block;
+        min-width: 0;
+        line-height: 1.35;
+      }
+      .verdict b {
+        font-size: 1.1em;
+      }
+      .next.b .sub {
+        font-size: 15px;
+      }
+      .next.b .sub b {
+        font-size: 17px;
+      }
+      .clock {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      .now {
+        font-size: 64px;
+        font-weight: 300;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .walk {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+      }
+      .walk ha-icon {
+        --mdc-icon-size: 18px;
       }
       .more {
         display: flex;
-        gap: 18px;
+        gap: 14px;
         margin-top: 10px;
-        font-size: 18px;
+        font-size: 16px;
         color: var(--text-2);
         font-variant-numeric: tabular-nums;
       }
@@ -302,18 +408,26 @@ export class PageTransit extends PageBase {
       .legend .veh.ba {
         background: var(--tile);
       }
-      @container (max-width: 760px) {
+      @container (max-width: 900px) {
         .top {
-          grid-template-columns: 1fr;
+          grid-template-columns: 1fr 1fr;
+        }
+        .clock {
+          order: -1;
+          grid-column: 1 / -1;
+          padding: 10px;
+        }
+        .now {
+          font-size: 40px;
         }
       }
     `,
   ];
 }
 
-function mins(at: Date) {
+function minsWord(at: Date) {
   const m = Math.round((at.getTime() - Date.now()) / 60_000);
-  if (m <= 0) return "Due";
+  if (m <= 0) return "under a minute";
   return `${m} min`;
 }
 
