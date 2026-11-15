@@ -1,0 +1,6 @@
+{
+  "name": "HA Panel App",
+  "filename": "ha-panel-app.js",
+  "render_readme": true,
+  "homeassistant": "2026.11.0"
+}
