@@ -122,8 +122,9 @@ export class HaPanelApp extends LitElement {
     }, 80);
   };
 
-  /** An automation can set the page entity to e.g. "music" or "photos". A suffix after "|"
-   *  (e.g. "home|1731667200") lets the same page be requested twice in a row. */
+  /** An automation can set the page entity to e.g. "music" or "photos", or to "next" / "prev"
+   *  to step between pages (handy for kiosk apps that report swipes as events). A suffix after
+   *  "|" (e.g. "home|1731667200") lets the same value be sent twice in a row. */
   private syncPageEntity() {
     const id = this.config.page_entity;
     if (!id || !this.hass) return;
@@ -133,7 +134,14 @@ export class HaPanelApp extends LitElement {
     this.lastPageValue = v;
     if (first) return; // don't jump on load
     const page = v.split("|")[0].trim().toLowerCase();
-    if (page) window.setTimeout(() => this.goTo(page), 0);
+    if (!page) return;
+    window.setTimeout(() => {
+      if (page === "next" || page === "prev") {
+        if (this.saver) return;
+        const to = Math.max(0, Math.min(this.pages.length - 1, this.index + (page === "next" ? 1 : -1)));
+        this.goTo(this.pages[to].id);
+      } else this.goTo(page);
+    }, 0);
   }
 
   // ---------- idle / screensaver ----------
