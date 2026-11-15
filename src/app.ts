@@ -57,6 +57,9 @@ export class HaPanelApp extends LitElement {
   private idleTimer?: number;
   private toastTimer?: number;
   private lastPageValue?: string;
+  /** Set while the user drags something sideways inside a page (slider, carousel), so a
+   *  kiosk app's swipe event for that drag doesn't also change page. */
+  private holdSwipeUntil = 0;
   private scrollEnd?: number;
 
   private get config(): PanelConfig {
@@ -72,6 +75,8 @@ export class HaPanelApp extends LitElement {
     this.addEventListener("panel-toast", this.onToast as EventListener);
     this.addEventListener("panel-wake", this.wake);
     window.addEventListener("pointerdown", this.activity, { capture: true, passive: true });
+    this.addEventListener("pointerdown", this.onPointerDown, { capture: true, passive: true });
+    this.addEventListener("pointermove", this.onPointerMove, { capture: true, passive: true });
     if (new URLSearchParams(location.search).has("kiosk")) {
       // Hide Home Assistant's sidebar on the wall tablet.
       this.dispatchEvent(new CustomEvent("hass-dock-sidebar", { detail: { dock: "always_hidden" }, bubbles: true, composed: true }));
@@ -112,6 +117,23 @@ export class HaPanelApp extends LitElement {
 
   private onNavigate = (e: CustomEvent<string>) => this.goTo(e.detail);
 
+  private holding = false;
+
+  private onPointerDown = (e: PointerEvent) => {
+    this.holding = e.composedPath().some((n) => {
+      if (!(n instanceof HTMLElement)) return false;
+      if (n instanceof HTMLInputElement && n.type === "range") return true;
+      if (n.classList.contains("pager")) return false;
+      const cs = getComputedStyle(n);
+      return /auto|scroll/.test(cs.overflowX) && n.scrollWidth > n.clientWidth + 2;
+    });
+    if (this.holding) this.holdSwipeUntil = Date.now() + 1500;
+  };
+
+  private onPointerMove = () => {
+    if (this.holding) this.holdSwipeUntil = Date.now() + 1500;
+  };
+
   private onScroll = () => {
     window.clearTimeout(this.scrollEnd);
     this.scrollEnd = window.setTimeout(() => {
@@ -137,7 +159,7 @@ export class HaPanelApp extends LitElement {
     if (!page) return;
     window.setTimeout(() => {
       if (page === "next" || page === "prev") {
-        if (this.saver) return;
+        if (this.saver || Date.now() < this.holdSwipeUntil) return;
         const to = Math.max(0, Math.min(this.pages.length - 1, this.index + (page === "next" ? 1 : -1)));
         this.goTo(this.pages[to].id);
       } else this.goTo(page);
