@@ -17,7 +17,7 @@ panel_custom:
     url_path: panel
     sidebar_title: Panel
     sidebar_icon: mdi:tablet-dashboard
-    module_url: /hacsfiles/ha-panel-app/ha-panel-app.js
+    module_url: /local/community/ha-panel-app/ha-panel-app.js
     config:
       rooms:
         - name: Room A
