@@ -1,3 +1,4 @@
+import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
@@ -287,4 +288,4 @@ function escRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-customElements.get("panel-lights") || customElements.define("panel-lights", PageLights);
+reg("panel-lights", PageLights);

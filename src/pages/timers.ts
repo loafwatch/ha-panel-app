@@ -1,3 +1,4 @@
+import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { PageBase } from "./base";
 import { timersOf } from "./timers-state";
@@ -196,4 +197,4 @@ export class PageTimers extends PageBase {
   ];
 }
 
-customElements.get("panel-timers") || customElements.define("panel-timers", PageTimers);
+reg("panel-timers", PageTimers);

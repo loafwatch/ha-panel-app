@@ -1,3 +1,4 @@
+import { reg } from "../registry";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
 import { tokens } from "../styles";
@@ -221,4 +222,4 @@ export class PanelScreensaver extends LitElement {
   ];
 }
 
-customElements.get("panel-screensaver") || customElements.define("panel-screensaver", PanelScreensaver);
+reg("panel-screensaver", PanelScreensaver);

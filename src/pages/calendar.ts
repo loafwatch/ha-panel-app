@@ -1,3 +1,4 @@
+import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
@@ -245,4 +246,4 @@ function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
-customElements.get("panel-calendar") || customElements.define("panel-calendar", PageCalendar);
+reg("panel-calendar", PageCalendar);

@@ -1,3 +1,4 @@
+import { reg } from "../registry";
 import { css, html, nothing, svg } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
@@ -222,4 +223,4 @@ function fmtW(w: number) {
   return w >= 1000 ? `${(w / 1000).toFixed(2)} kW` : `${Math.round(w)} W`;
 }
 
-customElements.get("panel-energy") || customElements.define("panel-energy", PageEnergy);
+reg("panel-energy", PageEnergy);

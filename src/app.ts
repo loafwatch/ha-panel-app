@@ -1,3 +1,4 @@
+import { reg } from "./registry";
 import { LitElement, css, nothing, type PropertyValues } from "lit";
 import { html, unsafeStatic } from "lit/static-html.js";
 import { property, query, state } from "lit/decorators.js";
@@ -313,8 +314,7 @@ export class HaPanelApp extends LitElement {
   ];
 }
 
-// Guard against double registration (the file may also be loaded as a dashboard resource).
-if (!customElements.get("ha-panel-app")) customElements.define("ha-panel-app", HaPanelApp);
+reg("ha-panel-app", HaPanelApp);
 
 declare global {
   interface HTMLElementTagNameMap {

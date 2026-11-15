@@ -1,3 +1,4 @@
+import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
@@ -729,4 +730,4 @@ export class PageHome extends PageBase {
   ];
 }
 
-customElements.get("panel-home") || customElements.define("panel-home", PageHome);
+reg("panel-home", PageHome);

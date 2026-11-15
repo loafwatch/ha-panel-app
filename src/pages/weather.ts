@@ -1,3 +1,4 @@
+import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { PageBase } from "./base";
 import { WEATHER_ICON, weatherLabel } from "../util";
@@ -259,4 +260,4 @@ function fxFor(c: string) {
   return "";
 }
 
-customElements.get("panel-weather") || customElements.define("panel-weather", PageWeather);
+reg("panel-weather", PageWeather);

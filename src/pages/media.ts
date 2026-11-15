@@ -1,3 +1,4 @@
+import { reg } from "../registry";
 import { css, html } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
@@ -43,4 +44,4 @@ export class PageMedia extends PageBase {
   ];
 }
 
-customElements.get("panel-media") || customElements.define("panel-media", PageMedia);
+reg("panel-media", PageMedia);
