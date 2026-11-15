@@ -158,8 +158,8 @@ export class PageEnergy extends PageBase {
     const total = costs.reduce((s, c) => s + c.v, 0);
     const perHour = rate ? (w / 1000) * Number(rate.state) : 0;
     return html`
-      <div class="page">
-        <div class="cards">
+      <div class="page fill">
+        <div class="cards ${en.devices?.length ? "three" : ""}">
           <div class="tile hero">
             <div class="label"><ha-icon icon="mdi:flash"></ha-icon>Using now</div>
             <div class="huge">${w >= 1000 ? (w / 1000).toFixed(2) : Math.round(w)}<span>${w >= 1000 ? "kW" : "W"}</span></div>
@@ -174,7 +174,6 @@ export class PageEnergy extends PageBase {
                 </div>
               </div>`
             : nothing}
-        </div>
         ${en.devices?.length
           ? html`<div class="tile apps">
               <div class="label"><ha-icon icon="mdi:power-plug-outline"></ha-icon>Appliances</div>
@@ -193,6 +192,7 @@ export class PageEnergy extends PageBase {
               </div>
             </div>`
           : nothing}
+        </div>
         <div class="tile chart">
           <div class="chead">
             <div class="seg">
@@ -346,11 +346,35 @@ export class PageEnergy extends PageBase {
   static styles = [
     PageBase.styles,
     css`
+      .page.fill {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+      }
       .cards {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
         gap: var(--gap);
         margin-bottom: var(--gap);
+        flex: none;
+      }
+      .cards.three {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);
+      }
+      .chart {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .chart .bars {
+        flex: 1;
+        min-height: 120px;
+        height: auto;
+      }
+      .cards.three .huge {
+        font-size: 44px;
       }
       .huge {
         font-size: 64px;
@@ -391,13 +415,9 @@ export class PageEnergy extends PageBase {
         display: flex;
         gap: 8px;
       }
-      .apps {
-        grid-column: 1 / -1;
-      }
       .applist {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 320px));
-        gap: 10px 32px;
+        gap: 6px;
         margin-top: 6px;
       }
       .app {
@@ -436,8 +456,9 @@ export class PageEnergy extends PageBase {
         --mdc-icon-size: 18px;
       }
       .sum {
-        margin: 16px 0 10px;
+        margin: 12px 0 8px;
         min-height: 62px;
+        flex: none;
       }
       .big {
         font-size: 34px;
@@ -463,9 +484,6 @@ export class PageEnergy extends PageBase {
       .bars.gas {
         --c1: #00c8d4;
         --c2: #2a6bd1;
-      }
-      .chart {
-        margin-top: 18px;
       }
       .sum.withbd {
         display: flex;
