@@ -53,6 +53,8 @@ export interface LightRoomConfig {
 export interface PanelConfig {
   /** Hide Home Assistant's sidebar on this panel (also enabled with ?kiosk=1). */
   kiosk?: boolean;
+  /** Fingers needed to swipe between pages: 1 (default) or 2. With 2, one finger only scrolls within a page. */
+  swipe_fingers?: 1 | 2;
   /** input_text / input_select whose value is the page to show: home, music, calendar, … or "photos". */
   page_entity?: string;
   /** Seconds of no touches before the photo screensaver starts (0 = never). */

@@ -58,6 +58,7 @@ export class HaPanelApp extends LitElement {
   private toastTimer?: number;
   private lastPageValue?: string;
   private scrollEnd?: number;
+  private drag?: { x: number; y: number; left: number; dx: number; lock?: "x" | "y"; t: number };
 
   private get config(): PanelConfig {
     return this.panel?.config ?? {};
@@ -122,6 +123,59 @@ export class HaPanelApp extends LitElement {
     }, 80);
   };
 
+  // ---------- two-finger swipe ----------
+
+  private get twoFinger() {
+    return this.config.swipe_fingers === 2;
+  }
+
+  private mid(e: TouchEvent) {
+    const a = e.touches[0];
+    const b = e.touches[1];
+    return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+  }
+
+  private onTouchStart = (e: TouchEvent) => {
+    if (!this.twoFinger || e.touches.length !== 2 || !this.pager) return;
+    const m = this.mid(e);
+    this.drag = { x: m.x, y: m.y, left: this.pager.scrollLeft, dx: 0, t: performance.now() };
+  };
+
+  private onTouchMove = (e: TouchEvent) => {
+    const d = this.drag;
+    const el = this.pager;
+    if (!d || !el || e.touches.length < 2) return;
+    const m = this.mid(e);
+    const dx = m.x - d.x;
+    const dy = m.y - d.y;
+    if (!d.lock && Math.hypot(dx, dy) > 12) {
+      d.lock = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (d.lock === "x") el.classList.add("dragging");
+    }
+    if (d.lock !== "x") return;
+    e.preventDefault();
+    d.dx = dx;
+    const max = el.scrollWidth - el.clientWidth;
+    el.scrollLeft = Math.min(max, Math.max(0, d.left - dx));
+  };
+
+  private onTouchEnd = (e: TouchEvent) => {
+    const d = this.drag;
+    const el = this.pager;
+    if (!d || e.touches.length >= 2) return;
+    this.drag = undefined;
+    if (!el || d.lock !== "x") return;
+    el.classList.remove("dragging");
+    const w = el.clientWidth;
+    const fast = Math.abs(d.dx) / Math.max(1, performance.now() - d.t) > 0.4; // px per ms
+    const from = Math.round(d.left / w);
+    let to = from;
+    if (d.dx < -w * 0.18 || (fast && d.dx < -40)) to = from + 1;
+    else if (d.dx > w * 0.18 || (fast && d.dx > 40)) to = from - 1;
+    to = Math.max(0, Math.min(this.pages.length - 1, to));
+    this.goTo(this.pages[to].id);
+  };
+
   /** An automation can set the page entity to e.g. "music" or "photos". A suffix after "|"
    *  (e.g. "home|1731667200") lets the same page be requested twice in a row. */
   private syncPageEntity() {
@@ -177,7 +231,14 @@ export class HaPanelApp extends LitElement {
     if (!this.hass) return html`<div class="loading">Connecting…</div>`;
     const pages = this.pages;
     return html`
-      <div class="pager" @scroll=${this.onScroll}>
+      <div
+        class="pager ${this.twoFinger ? "two" : ""}"
+        @scroll=${this.onScroll}
+        @touchstart=${{ handleEvent: this.onTouchStart, passive: true }}
+        @touchmove=${{ handleEvent: this.onTouchMove, passive: false }}
+        @touchend=${{ handleEvent: this.onTouchEnd, passive: true }}
+        @touchcancel=${{ handleEvent: this.onTouchEnd, passive: true }}
+      >
         ${pages.map((p, i) => {
           const tag = unsafeStatic(p.tag);
           return html`<section class="slot" aria-label=${p.label}>
@@ -228,6 +289,14 @@ export class HaPanelApp extends LitElement {
         scrollbar-width: none;
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
+      }
+      /* two-finger mode: one finger never moves between pages */
+      .pager.two {
+        overflow-x: hidden;
+        touch-action: pan-y;
+      }
+      .pager.dragging {
+        scroll-snap-type: none;
       }
       .pager::-webkit-scrollbar {
         display: none;

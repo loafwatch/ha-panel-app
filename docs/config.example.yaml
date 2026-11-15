@@ -8,6 +8,7 @@ panel_custom:
     config:
       page_entity: input_text.panel_page      # automations set this to e.g. "music" or "photos"
       idle_seconds: 120                       # photo screensaver after 2 minutes untouched
+      swipe_fingers: 2                        # swipe between pages with two fingers (default 1)
       weather: weather.home
       calendars: [calendar.family]
       todo_lists:
