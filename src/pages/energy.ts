@@ -10,6 +10,8 @@ interface Bar {
   kwh: number;
   /** the highlighted device's share of this slot (kWh) */
   hi?: number;
+  /** every appliance's kWh for this slot, in config order */
+  parts?: number[];
   cost?: number;
   future: boolean;
 }
@@ -98,7 +100,7 @@ export class PageEnergy extends PageBase {
   }
 
   private loadKey() {
-    return this.range + "|" + this.kind + "|" + (this.dev ?? "");
+    return this.range + "|" + this.kind;
   }
 
   private async load() {
@@ -108,8 +110,9 @@ export class PageEnergy extends PageBase {
     this.loadedAt = Date.now();
     if (!src) return;
     const { start, starts, period } = this.slots();
-    const devId = this.kind === "electricity" && this.dev != null ? this.config.energy?.devices?.[this.dev]?.energy : undefined;
-    const ids = [src.energy, src.cost, devId].filter(Boolean) as string[];
+    const devs = this.kind === "electricity" ? (this.config.energy?.devices ?? []) : [];
+    const devIds = devs.map((d) => d.energy);
+    const ids = [...new Set([src.energy, src.cost, ...devIds].filter(Boolean))] as string[];
     try {
       const r = await this.hass.callWS<Record<string, { start: number | string; change?: number | null }[]>>({
         type: "recorder/statistics_during_period",
@@ -134,8 +137,12 @@ export class PageEnergy extends PageBase {
       const kwh = pick(src.energy);
       const cost = src.cost ? pick(src.cost) : undefined;
       const now = Date.now();
-      const hi = devId ? pick(devId) : undefined;
-      this.bars = starts.map((t, i) => ({ t, kwh: Math.max(0, kwh.get(i) ?? 0), hi: hi ? Math.max(0, hi.get(i) ?? 0) : undefined, cost: cost?.get(i), future: t > now }));
+      const partMaps = devIds.map((id) => (id ? pick(id) : undefined));
+      this.bars = starts.map((t, i) => {
+        const parts = partMaps.map((m) => Math.max(0, m?.get(i) ?? 0));
+        const hi = this.dev != null && partMaps[this.dev] ? parts[this.dev] : undefined;
+        return { t, kwh: Math.max(0, kwh.get(i) ?? 0), hi, parts: partMaps.length ? parts : undefined, cost: cost?.get(i), future: t > now };
+      });
       this.sel = undefined;
     } catch (e) {
       console.warn("ha-panel-app: energy statistics", e);
@@ -242,16 +249,20 @@ export class PageEnergy extends PageBase {
     const avg = withData.length ? withData.reduce((s, b) => s + b.kwh, 0) / withData.length : 0;
     const unitWord = this.range === "day" ? "an hour" : this.range === "year" ? "a month" : "a day";
     const dev = this.dev != null ? this.config.energy?.devices?.[this.dev] : undefined;
-    const hiOn = !!dev && bars.some((b) => b.hi != null);
-    const hiTotal = hiOn ? past.reduce((s, b) => s + (b.hi ?? 0), 0) : 0;
+    const hiOf = (b: Bar) => (this.dev != null ? b.parts?.[this.dev] : undefined);
+    const hiOn = !!dev && this.kind === "electricity" && bars.some((b) => hiOf(b) != null);
+    const hiTotal = hiOn ? past.reduce((s, b) => s + (hiOf(b) ?? 0), 0) : 0;
     const share = hiOn && total > 0 ? Math.round((hiTotal / total) * 100) : undefined;
     return html`
-      <div class="sum">
+      <div class="sum ${sel ? "withbd" : ""}">
+        <div class="sumtxt">
         ${sel
-          ? html`<div class="big">${fmtKwh(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}${hiOn && sel.hi != null ? html`<span class="hi">${dev!.name} ${fmtKwh(sel.hi)}${sel.kwh > 0 ? ` · ${Math.round((sel.hi / sel.kwh) * 100)}%` : ""}</span>` : nothing}</div>
+          ? html`<div class="big">${fmtKwh(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}${hiOn && hiOf(sel) != null ? html`<span class="hi">${dev!.name} ${fmtKwh(hiOf(sel)!)}${sel.kwh > 0 ? ` · ${Math.round((hiOf(sel)! / sel.kwh) * 100)}%` : ""}</span>` : nothing}</div>
               <div class="muted">${this.slotLabel(sel.t, true)}</div>`
           : html`<div class="big">${fmtKwh(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}${hiOn ? html`<span class="hi">${dev!.name} ${fmtKwh(hiTotal)} · ${share ?? 0}%</span>` : nothing}</div>
               <div class="muted">${this.rangeLabel()} · average ${fmtKwh(avg)} ${unitWord}</div>`}
+        </div>
+        ${sel ? this.breakdown(sel) : nothing}
       </div>
       <div class="bars ${this.kind} ${hiOn ? "hilite" : ""}" @click=${(e: Event) => e.target === e.currentTarget && (this.sel = undefined)}>
         ${[0.25, 0.5, 0.75].map((f) => html`<i class="gl" style="bottom:${f * 100}%"></i>`)}
@@ -263,12 +274,40 @@ export class PageEnergy extends PageBase {
             aria-label=${this.slotLabel(b.t, true) + " " + fmtKwh(b.kwh)}
           >
             <span class="tot" style="height:${b.future ? 0 : Math.max(b.kwh > 0 ? 2 : 0, (b.kwh / max) * 100)}%"></span>
-            <span class="part" style="height:${b.future || !hiOn ? 0 : ((b.hi ?? 0) / max) * 100}%"></span>
+            <span class="part" style="height:${b.future || !hiOn ? 0 : ((hiOf(b) ?? 0) / max) * 100}%"></span>
           </button>`,
         )}
       </div>
       <div class="axis muted">${bars.map((b, i) => html`<span>${this.tickLabel(b.t, i)}</span>`)}</div>
     `;
+  }
+
+  /** What made up a selected bar: each appliance's kWh and share, plus everything else. */
+  private breakdown(b: Bar) {
+    const devs = this.config.energy?.devices ?? [];
+    if (!b.parts || !devs.length || b.kwh <= 0 || this.kind !== "electricity") return nothing;
+    const rows = devs.map((d, i) => ({ name: d.name, icon: d.icon, v: b.parts![i], i })).filter((r) => r.v > 0.005).sort((p, q) => q.v - p.v);
+    const known = rows.reduce((s, r) => s + r.v, 0);
+    const other = Math.max(0, b.kwh - known);
+    const pct = (v: number) => Math.round((v / b.kwh) * 100);
+    return html`<div class="bd">
+      ${rows.map(
+        (r) => html`<button class="bdrow ${this.dev === r.i ? "on" : ""}" @click=${() => (this.dev = this.dev === r.i ? undefined : r.i)}>
+          <ha-icon icon=${r.icon ?? "mdi:power-plug-outline"}></ha-icon>
+          <span class="bdn">${r.name}</span>
+          <span class="bdbar"><i style="width:${pct(r.v)}%"></i></span>
+          <b>${pct(r.v)}%</b><span class="muted">${fmtKwh(r.v)}</span>
+        </button>`,
+      )}
+      ${rows.length
+        ? html`<div class="bdrow other">
+            <ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon>
+            <span class="bdn">Everything else</span>
+            <span class="bdbar"><i style="width:${pct(other)}%"></i></span>
+            <b>${pct(other)}%</b><span class="muted">${fmtKwh(other)}</span>
+          </div>`
+        : html`<div class="muted">No appliance readings for this period yet</div>`}
+    </div>`;
   }
 
   private tickLabel(t: number, i: number) {
@@ -424,6 +463,75 @@ export class PageEnergy extends PageBase {
       .bars.gas {
         --c1: #00c8d4;
         --c2: #2a6bd1;
+      }
+      .chart {
+        margin-top: 18px;
+      }
+      .sum.withbd {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 24px;
+      }
+      .sumtxt {
+        flex: none;
+      }
+      .bd {
+        display: grid;
+        gap: 2px;
+        flex: 0 1 520px;
+        min-width: 0;
+      }
+      .bdrow {
+        display: grid;
+        grid-template-columns: 22px 130px 1fr 42px 64px;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        background: none;
+        border: 0;
+        padding: 2px 6px;
+        border-radius: 8px;
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+      }
+      .bdrow.on {
+        background: var(--tile-2);
+      }
+      .bdrow ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--text-2);
+      }
+      .bdrow.on ha-icon {
+        color: var(--cy);
+      }
+      .bdn {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bdbar {
+        height: 8px;
+        border-radius: 4px;
+        background: rgba(127, 127, 127, 0.2);
+        overflow: hidden;
+      }
+      .bdbar i {
+        display: block;
+        height: 100%;
+        background: var(--cy);
+        transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      .bdrow.other .bdbar i {
+        background: var(--c1, var(--accent));
+        opacity: 0.6;
+      }
+      .bdrow b {
+        text-align: right;
+      }
+      .sum {
+        min-height: 62px;
       }
       .hi {
         font-size: 18px;
