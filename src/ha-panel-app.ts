@@ -2,7 +2,7 @@ import { LitElement, css, html } from "lit";
 import { property, state } from "lit/decorators.js";
 import type { HomeAssistant, PanelInfo } from "./types";
 
-export const VERSION = "0.0.1";
+export const VERSION = "0.1.0";
 
 /**
  * Root element registered as a Home Assistant custom panel.
