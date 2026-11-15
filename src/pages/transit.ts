@@ -58,7 +58,7 @@ export class PageTransit extends PageBase {
 
   /** Vehicles on the line in one direction, from upcoming departures plus the
    *  headway worked backwards to cover trams that have already left. */
-  private vehicles(dir: "ab" | "ba", deps: Dep[]): Vehicle[] {
+  private vehicles(dir: "ab" | "ba", deps: Dep[], includeNotYetLeft = false): Vehicle[] {
     const t = this.config.transit!;
     const stops = t.stops;
     const total = dir === "ab" ? stops[stops.length - 1].ab : stops[0].ba;
@@ -75,7 +75,11 @@ export class PageTransit extends PageBase {
     const out: Vehicle[] = [];
     for (const s of starts) {
       const elapsed = (now - s.at) / 60_000;
-      if (elapsed < 0 || elapsed > total + 1) continue;
+      if (elapsed > total + 1) continue;
+      if (elapsed < 0) {
+        if (includeNotYetLeft) out.push({ dir, frac: dir === "ab" ? 0 : 1, stop: "", label: "", live: s.live, eta: s.at + total * 60_000 });
+        continue;
+      }
       // find the segment the tram is in
       const seq = dir === "ab" ? stops : [...stops].reverse();
       const off = (x: (typeof stops)[0]) => (dir === "ab" ? x.ab : x.ba);
@@ -118,7 +122,9 @@ export class PageTransit extends PageBase {
     const walk = t.walk_min ?? 0;
     // estimated time the next tram reaches A: the matching run from B plus the run time
     const runBA = t.stops[0].ba;
-    const arrivalsA = this.vehicles("ba", depsB).map((v) => v.eta).filter((x): x is number => x != null);
+    const inbound = this.vehicles("ba", depsB, true).filter((v) => v.eta != null && v.eta >= now - 60_000).sort((p, q) => p.eta! - q.eta!);
+    const arrivals = inbound;
+    const arrivalsA = inbound.map((v) => v.eta!);
     const dwell = (dep: Dep) => {
       const arr = arrivalsA.filter((x) => x <= dep.at.getTime() + 60_000 && x > dep.at.getTime() - 25 * 60_000).sort((p, q) => q - p)[0];
       return arr ? new Date(arr) : undefined;
@@ -160,15 +166,15 @@ export class PageTransit extends PageBase {
             ${walk ? html`<div class="muted walk"><ha-icon icon="mdi:walk"></ha-icon>${walk} min walk to ${t.a.name}</div>` : nothing}
           </div>
           <div class="tile next b">
-            <div class="label"><ha-icon icon=${t.icon ?? "mdi:tram"}></ha-icon>Next from ${t.b.name}</div>
-            ${nextB.length
+            <div class="label"><ha-icon icon="mdi:tram"></ha-icon>Arriving at ${t.a.name}</div>
+            ${arrivals.length
               ? html`<div class="first">
-                    <span class="mins">${hm(nextB[0].at)}</span>
-                    <span class="sub"><b>leaves in ${minsWord(nextB[0].at)}</b><br />to ${nextB[0].to}${nextB[0].live ? html` <i class="live">live</i>` : nothing}</span>
+                    <span class="mins">${hm(new Date(arrivals[0].eta!))}</span>
+                    <span class="sub"><b>in ${minsWord(new Date(arrivals[0].eta!))}</b><br />from ${t.b.name}${arrivals[0].live ? html` <i class="live">live</i>` : nothing}</span>
                   </div>
-                  <div class="more">Then ${nextB.slice(1).map((d) => html`<span>${hm(d.at)}</span>`)}</div>
-                  <div class="muted plat">About ${runBA} min to ${t.a.name}</div>`
-              : html`<div class="empty">${stale ? "Waiting for the departure board…" : "No more departures listed"}</div>`}
+                  <div class="more">Then ${arrivals.slice(1, 4).map((v) => html`<span>${hm(new Date(v.eta!))}</span>`)}</div>
+                  <div class="muted plat">Estimated from the ${runBA} min run from ${t.b.name}</div>`
+              : html`<div class="empty">${stale ? "Waiting for the departure board…" : "No inbound trams listed"}</div>`}
           </div>
         </div>
         <div class="tile map">
