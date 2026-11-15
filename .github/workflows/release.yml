@@ -1,8 +1,12 @@
 name: Release
 
+# Publishes a release whenever the version in package.json changes on main.
+# (Tags are created here by GitHub, not pushed from a working copy.)
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: [package.json]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,16 +16,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: Leak-pattern scan
+      - name: Read version
+        id: v
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Skip if already released
+        id: exists
+        run: |
+          if git rev-parse "${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then echo "yes=true" >> "$GITHUB_OUTPUT"; else echo "yes=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.exists.outputs.yes == 'false'
+        run: npm ci
+      - if: steps.exists.outputs.yes == 'false'
+        name: Leak-pattern scan
         run: node scripts/privacy-scan.mjs --all
-      - run: npm run build
-      - name: Publish release
+      - if: steps.exists.outputs.yes == 'false'
+        run: npm run build
+      - if: steps.exists.outputs.yes == 'false'
+        name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: dist/ha-panel-app.js
           generate_release_notes: true
