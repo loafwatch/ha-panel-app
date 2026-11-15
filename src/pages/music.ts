@@ -41,6 +41,9 @@ export class PageMusic extends PageBase {
   private key?: string; // player|title currently shown
   private lastLive: Record<string, number> = {};
   private lastLiveState: Record<string, HassEntity> = {};
+  /** After a skip from the panel, ignore other titles until this one is reported (or it times out). */
+  private expect?: { title: string; until: number };
+  private pending = false;
 
   protected watched() {
     const m = this.config.music;
@@ -82,6 +85,11 @@ export class PageMusic extends PageBase {
     const a = this.hass.states[r.player].attributes;
     const title: string | undefined = a.media_title;
     if (!title) return;
+    if (this.expect) {
+      if (title === this.expect.title || Date.now() > this.expect.until) this.expect = undefined;
+      else return; // stale report of the old track straight after a skip
+    }
+    if (this.pending) return;
     const key = r.player + "|" + title;
     if (key === this.key) {
       if (this.cur && !this.cur.img && a.entity_picture) this.cur = { ...this.cur, img: a.entity_picture };
@@ -91,7 +99,12 @@ export class PageMusic extends PageBase {
     let dir: "" | "R" | "L" = "";
     if (sameRoom && this.next?.title === title) dir = "R";
     else if (sameRoom && this.prev?.title === title) dir = "L";
-    this.advance(r, { title, artist: a.media_artist, img: dir === "R" && this.next?.img ? this.next.img : a.entity_picture }, dir, sameRoom);
+    const img = dir === "R" && this.next?.img ? this.next.img : a.entity_picture;
+    this.pending = true;
+    whenLoaded(img, () => {
+      this.pending = false;
+      this.advance(r, { title, artist: a.media_artist, img }, dir, sameRoom);
+    });
   }
 
   private advance(r: RoomConfig, t: Track, dir: "" | "R" | "L", sameRoom: boolean) {
@@ -171,8 +184,14 @@ export class PageMusic extends PageBase {
     if (!r) return;
     call(this.hass, "media_player", dir > 0 ? "media_next_track" : "media_previous_track", { entity_id: r.player });
     // Move straight away; the state update that follows is recognised as the same track and ignored.
-    if (dir > 0 && this.next) this.advance(r, { ...this.next }, "R", true);
-    else if (dir < 0 && this.prev) this.advance(r, { ...this.prev }, "L", true);
+    const target = dir > 0 ? this.next : this.prev;
+    if (!target) return;
+    this.expect = { title: target.title, until: Date.now() + 8000 };
+    this.pending = true;
+    whenLoaded(target.img, () => {
+      this.pending = false;
+      this.advance(r, { ...target }, dir > 0 ? "R" : "L", true);
+    });
   }
 
   private ctl(service: string, data: Record<string, any> = {}) {
@@ -701,6 +720,22 @@ export class PageMusic extends PageBase {
       }
     `,
   ];
+}
+
+/** Run `cb` once an image is decoded (so it never flashes blank), or after 600 ms at most. */
+function whenLoaded(url: string | undefined, cb: () => void) {
+  if (!url) return cb();
+  let done = false;
+  const go = () => {
+    if (!done) {
+      done = true;
+      cb();
+    }
+  };
+  const im = new Image();
+  im.src = url;
+  im.decode().then(go, go);
+  window.setTimeout(go, 600);
 }
 
 function mmss(s: number) {
