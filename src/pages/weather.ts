@@ -2,6 +2,7 @@ import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { PageBase } from "./base";
 import { WEATHER_ICON, weatherLabel } from "../util";
+import "../components/weather-fx";
 
 export class PageWeather extends PageBase {
   protected usesHub = true;
@@ -16,14 +17,11 @@ export class PageWeather extends PageBase {
     const a = w.attributes;
     const daily = this.hub.daily.slice(0, 7);
     const hourly = this.hub.hourly.slice(0, 24);
-    const lo = Math.min(...daily.map((d) => d.templow ?? d.temperature ?? 0));
-    const hi = Math.max(...daily.map((d) => d.temperature ?? 0));
-    const fx = fxFor(w.state);
     return html`
       <div class="page">
         <div class="top">
-          <div class="tile now ${fx}">
-            <div class="fx"></div>
+          <div class="tile now">
+            <panel-weather-fx condition=${w.state} ?dark=${this.dark}></panel-weather-fx>
             <div class="nowrow">
               <ha-icon icon=${WEATHER_ICON[w.state] ?? "mdi:weather-cloudy"}></ha-icon>
               <div>
@@ -40,19 +38,21 @@ export class PageWeather extends PageBase {
           </div>
           <div class="tile days">
             <div class="label"><ha-icon icon="mdi:calendar-week"></ha-icon>Coming days</div>
+            <div class="day head">
+              <span></span><span></span><span class="rain">Rain</span><span class="num">High</span><span class="num">Low</span>
+            </div>
             ${daily.map((d, i) => {
               const t = new Date(d.datetime);
-              const l = d.templow ?? lo;
-              const h = d.temperature ?? hi;
-              const left = hi > lo ? ((l - lo) / (hi - lo)) * 100 : 0;
-              const width = hi > lo ? ((h - l) / (hi - lo)) * 100 : 100;
+              const cond = d.condition ?? "";
+              const pp = d.precipitation_probability;
+              const mm = d.precipitation ?? 0;
+              const rain = pp != null ? (pp >= 5 ? `${Math.round(pp)}%` : "") : mm >= 0.1 ? `${mm < 10 ? mm.toFixed(1) : Math.round(mm)} mm` : "";
               return html`<div class="day">
-                <span class="dn">${i === 0 ? "Today" : t.toLocaleDateString("en-GB", { weekday: "short" })}</span>
-                <ha-icon icon=${WEATHER_ICON[d.condition ?? ""] ?? "mdi:weather-cloudy"}></ha-icon>
-                <span class="rain">${d.precipitation_probability != null ? `${Math.round(d.precipitation_probability)}%` : d.precipitation ? `${d.precipitation}mm` : ""}</span>
-                <span class="lo">${Math.round(l)}°</span>
-                <span class="range"><i style="left:${left}%;width:${Math.max(width, 4)}%"></i></span>
-                <span class="hi">${Math.round(h)}°</span>
+                <span class="dn">${i === 0 ? "Today" : t.toLocaleDateString("en-GB", { weekday: "long" })}</span>
+                <span class="cond"><ha-icon icon=${WEATHER_ICON[cond] ?? "mdi:weather-cloudy"}></ha-icon>${weatherLabel(cond)}</span>
+                <span class="rain ${rain ? "" : "dry"}">${rain ? html`<ha-icon icon="mdi:water"></ha-icon>${rain}` : "Dry"}</span>
+                <span class="num hi">${d.temperature != null ? `${Math.round(d.temperature)}°` : ""}</span>
+                <span class="num lo">${d.templow != null ? `${Math.round(d.templow)}°` : ""}</span>
               </div>`;
             })}
           </div>
@@ -135,42 +135,68 @@ export class PageWeather extends PageBase {
       }
       .day {
         display: grid;
-        grid-template-columns: 64px 34px 44px 36px 1fr 36px;
+        grid-template-columns: minmax(64px, 0.9fr) minmax(0, 1.4fr) 74px 38px 38px;
         align-items: center;
         gap: 8px;
         padding: 9px 0;
-        font-size: 15px;
+        font-size: 16px;
+        border-top: 1px solid rgba(127, 127, 127, 0.12);
+      }
+      .day.head {
+        border-top: 0;
+        padding: 0 0 4px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-2);
       }
       .dn {
         font-weight: 600;
       }
-      .day ha-icon {
+      .cond {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-2);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cond ha-icon {
         color: var(--accent);
+        flex: none;
       }
       .rain {
-        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 3px;
         color: var(--cy);
         font-weight: 600;
+        font-size: 15px;
       }
-      .lo {
+      .head .rain {
         color: var(--text-2);
+        font-size: 12px;
+      }
+      :host(:not([dark])) .day:not(.head) .rain {
+        color: #0089a0;
+      }
+      .rain ha-icon {
+        --mdc-icon-size: 16px;
+      }
+      .rain.dry {
+        color: var(--text-2) !important;
+        font-weight: 400;
+      }
+      .num {
         text-align: right;
       }
       .hi {
         font-weight: 600;
       }
-      .range {
-        position: relative;
-        height: 6px;
-        border-radius: 3px;
-        background: rgba(127, 127, 127, 0.2);
-      }
-      .range i {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        border-radius: 3px;
-        background: linear-gradient(90deg, var(--cy), var(--pk));
+      .lo {
+        color: var(--text-2);
       }
       .hrow {
         display: flex;
@@ -198,66 +224,8 @@ export class PageWeather extends PageBase {
         color: var(--cy);
         min-height: 13px;
       }
-      /* gentle weather animations behind the current conditions */
-      .fx {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0.5;
-      }
-      .fx-rain .fx {
-        background-image: repeating-linear-gradient(105deg, transparent 0 14px, rgba(0, 200, 212, 0.35) 14px 15px);
-        background-size: 60px 60px;
-        animation: rainfall 0.8s linear infinite;
-      }
-      @keyframes rainfall {
-        to {
-          background-position: -16px 60px;
-        }
-      }
-      .fx-sun .fx {
-        background: radial-gradient(circle at 85% 15%, rgba(255, 190, 60, 0.45), transparent 45%);
-        animation: glow 6s ease-in-out infinite;
-      }
-      @keyframes glow {
-        50% {
-          opacity: 0.25;
-        }
-      }
-      .fx-cloud .fx,
-      .fx-fog .fx {
-        inset: -20% -40%;
-        background: radial-gradient(ellipse 35% 30% at 25% 35%, rgba(160, 150, 185, 0.45), transparent 70%),
-          radial-gradient(ellipse 30% 25% at 70% 60%, rgba(160, 150, 185, 0.35), transparent 70%);
-        filter: blur(18px);
-        animation: drift 24s ease-in-out infinite alternate;
-      }
-      @keyframes drift {
-        to {
-          transform: translateX(18%);
-        }
-      }
-      .fx-snow .fx {
-        background-image: radial-gradient(circle, rgba(255, 255, 255, 0.8) 1.5px, transparent 2px);
-        background-size: 34px 34px;
-        animation: snowfall 6s linear infinite;
-      }
-      @keyframes snowfall {
-        to {
-          background-position: 20px 340px;
-        }
-      }
     `,
   ];
-}
-
-function fxFor(c: string) {
-  if (/rain|pouring|lightning/.test(c)) return "fx-rain";
-  if (/snow/.test(c)) return "fx-snow";
-  if (c === "sunny") return "fx-sun";
-  if (c === "fog") return "fx-fog";
-  if (/cloud/.test(c)) return "fx-cloud";
-  return "";
 }
 
 reg("panel-weather", PageWeather);

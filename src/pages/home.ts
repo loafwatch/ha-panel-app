@@ -5,6 +5,7 @@ import { PageBase } from "./base";
 import { activeRoom, roomState } from "./music-state";
 import { binsInfo } from "./bins";
 import { timersOf } from "./timers-state";
+import "../components/weather-fx";
 import { WEATHER_ICON, call, dayLabel, fmtCountdown, fmtDay, fmtTime, isOn, longPress, weatherLabel } from "../util";
 
 export class PageHome extends PageBase {
@@ -51,6 +52,7 @@ export class PageHome extends PageBase {
     const today = this.hub.daily[0];
     return html`
       <div class="tile tap clock" @click=${() => this.navigate("weather")}>
+        ${w ? html`<panel-weather-fx subtle condition=${w.state} ?dark=${this.dark}></panel-weather-fx>` : nothing}
         <div class="time">${fmtTime(now)}</div>
         <div class="date">${fmtDay(now)}</div>
         ${w
@@ -362,6 +364,10 @@ export class PageHome extends PageBase {
         color: var(--text-2);
       }
       /* clock */
+      .clock > :not(panel-weather-fx) {
+        position: relative;
+        z-index: 1;
+      }
       .clock .time {
         font-size: 76px;
         font-weight: 300;
