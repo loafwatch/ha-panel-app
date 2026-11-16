@@ -218,24 +218,23 @@ export class PageEnergy extends PageBase {
                     <ha-icon icon=${k === "gas" ? "mdi:fire" : "mdi:flash"}></ha-icon>${k === "gas" ? "Gas" : "Electricity"}
                   </button>`,
                 )}
-              ${(en.devices ?? []).map((d, i) =>
-                d.energy
-                  ? html`<button
-                      class="chip dev ${this.dev === i ? "on" : ""}"
-                      @click=${() => {
-                        this.dev = this.dev === i ? undefined : i;
-                        if (this.dev != null) this.kind = "electricity";
-                      }}
-                    >
-                      <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}${this.liveW(d.power)}
-                    </button>`
-                  : nothing,
-              )}
             </div>
             <div class="seg">
               ${RANGES.map((r) => html`<button class="chip ${this.range === r.id ? "on" : ""}" @click=${() => (this.range = r.id)}>${r.label}</button>`)}
             </div>
           </div>
+          ${this.kind === "electricity" && en.devices?.length
+            ? html`<div class="devrow">
+                <span class="devlabel muted">Highlight</span>
+                ${en.devices.map((d, i) =>
+                  d.energy
+                    ? html`<button class="chip dev ${this.dev === i ? "on" : ""}" @click=${() => (this.dev = this.dev === i ? undefined : i)}>
+                        <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}${this.liveW(d.power)}
+                      </button>`
+                    : nothing,
+                )}
+              </div>`
+            : nothing}
           ${this.chart()}
         </div>
       </div>
@@ -442,6 +441,25 @@ export class PageEnergy extends PageBase {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+      }
+      .devrow {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(127, 127, 127, 0.14);
+      }
+      .devlabel {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-right: 4px;
+      }
+      .devrow .chip {
+        padding: 6px 12px;
+        font-size: 14px;
       }
       .chip .w {
         font-weight: 400;
