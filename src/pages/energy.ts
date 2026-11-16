@@ -186,7 +186,7 @@ export class PageEnergy extends PageBase {
     const perHour = rate ? (w / 1000) * Number(rate.state) : 0;
     return html`
       <div class="page fill">
-        <div class="cards ${en.devices?.length ? "three" : ""}">
+        <div class="cards">
           <div class="tile hero">
             <div class="label"><ha-icon icon="mdi:flash"></ha-icon>Using now</div>
             <div class="huge">${w >= 1000 ? (w / 1000).toFixed(2) : Math.round(w)}<span>${w >= 1000 ? "kW" : "W"}</span></div>
@@ -201,24 +201,6 @@ export class PageEnergy extends PageBase {
                 </div>
               </div>`
             : nothing}
-        ${en.devices?.length
-          ? html`<div class="tile apps">
-              <div class="label"><ha-icon icon="mdi:power-plug-outline"></ha-icon>Appliances</div>
-              <div class="applist">
-                ${en.devices.map((d) => {
-                  const dw = Number(this.st(d.power)?.state);
-                  const today = Number(this.st(d.energy)?.state);
-                  const on = dw >= 5;
-                  return html`<div class="app ${on ? "on" : ""}">
-                    <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>
-                    <span class="an">${d.name}</span>
-                    <b>${isNaN(dw) ? "–" : on ? (dw >= 1000 ? (dw / 1000).toFixed(2) + " kW" : Math.round(dw) + " W") : "off"}</b>
-                    <span class="muted">${isNaN(today) ? "" : `${today.toFixed(2)} kWh today`}</span>
-                  </div>`;
-                })}
-              </div>
-            </div>`
-          : nothing}
         </div>
         <div class="tile chart">
           <div class="chead">
@@ -245,7 +227,7 @@ export class PageEnergy extends PageBase {
                         if (this.dev != null) this.kind = "electricity";
                       }}
                     >
-                      <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}
+                      <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}${this.liveW(d.power)}
                     </button>`
                   : nothing,
               )}
@@ -307,6 +289,13 @@ export class PageEnergy extends PageBase {
       </div>
       <div class="axis muted">${bars.map((b, i) => html`<span>${this.tickLabel(b.t, i)}</span>`)}</div>
     `;
+  }
+
+  /** Live draw for a chip: "· 70 W", "· 1.8 kW", or nothing when off/unknown. */
+  private liveW(power?: string) {
+    const w = Number(this.st(power)?.state);
+    if (isNaN(w) || w < 5) return nothing;
+    return html`<span class="w">${w >= 1000 ? (w / 1000).toFixed(1) + " kW" : Math.round(w) + " W"}</span>`;
   }
 
   /** What made up a selected bar: each appliance's kWh and share, plus everything else. */
@@ -386,9 +375,6 @@ export class PageEnergy extends PageBase {
         margin-bottom: var(--gap);
         flex: none;
       }
-      .cards.three {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);
-      }
       .chart {
         flex: 1;
         min-height: 0;
@@ -399,9 +385,6 @@ export class PageEnergy extends PageBase {
         flex: 1;
         min-height: 120px;
         height: auto;
-      }
-      .cards.three .huge {
-        font-size: 44px;
       }
       .huge {
         font-size: 64px;
@@ -442,33 +425,6 @@ export class PageEnergy extends PageBase {
         display: flex;
         gap: 8px;
       }
-      .applist {
-        display: grid;
-        gap: 6px;
-        margin-top: 6px;
-      }
-      .app {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-        grid-template-rows: auto auto;
-        column-gap: 10px;
-        align-items: center;
-        font-size: 16px;
-      }
-      .app ha-icon {
-        grid-row: 1 / 3;
-        color: var(--text-2);
-      }
-      .app.on ha-icon {
-        color: var(--cy);
-      }
-      .app b {
-        font-size: 18px;
-      }
-      .app .muted {
-        grid-column: 2 / 4;
-        font-size: 13px;
-      }
       .chead {
         flex-wrap: wrap;
         gap: 10px;
@@ -481,6 +437,19 @@ export class PageEnergy extends PageBase {
       }
       .seg .chip ha-icon {
         --mdc-icon-size: 18px;
+      }
+      .seg {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .chip .w {
+        font-weight: 400;
+        opacity: 0.8;
+        margin-left: 4px;
+      }
+      .chip.dev.on .w {
+        opacity: 1;
       }
       .sum {
         margin: 12px 0 8px;
