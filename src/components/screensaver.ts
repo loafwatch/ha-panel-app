@@ -70,7 +70,10 @@ export class PanelScreensaver extends LitElement {
     if (!this.open) return nothing;
     const c = this.config;
     const w = c.weather ? this.hass.states[c.weather] : undefined;
-    const next = this.hub.events.find((e) => e.end.getTime() > Date.now());
+    // After 7pm the day's business is usually done, so look to tomorrow instead.
+    const now = new Date();
+    const from = now.getHours() >= 19 ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) : now;
+    const next = this.hub.events.find((e) => e.end.getTime() > from.getTime() && (now.getHours() < 19 || e.start.getTime() >= from.getTime()));
     const rem = (c.todo_lists?.[0] ? this.hub.todos[c.todo_lists[0].entity] ?? [] : []).filter((i) => i.status === "needs_action");
     const bins = binsInfo(this.hass, c);
     const url = c.photos?.url ? c.photos.url + (c.photos.url.includes("?") ? "&" : "?") + "n=" + this.n : "";
