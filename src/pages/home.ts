@@ -741,7 +741,7 @@ export class PageHome extends PageBase {
         height: 44px;
         margin-top: 10px;
         overflow: hidden;
-        color: var(--accent);
+        color: var(--cy);
       }
       .wave .glow {
         filter: drop-shadow(0 0 3px currentColor);
