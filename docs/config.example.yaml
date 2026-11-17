@@ -60,9 +60,10 @@ panel_custom:
         - name: Living room
           remote: remote.example_tv
           media_player: media_player.example_tv
+          adb: media_player.example_tv_adb    # optional Android TV (ADB) entity: open apps by package name
           apps:
-            - { name: YouTube, activity: "https://www.youtube.com", icon: mdi:youtube, color: "#ff0033" }
-            - { name: Netflix, activity: "https://www.netflix.com/title", icon: mdi:netflix, color: "#e50914" }
+            - { name: YouTube, package: com.google.android.youtube.tv, icon: mdi:youtube, color: "#ff0033" }
+            - { name: Spotify, activity: "spotify://", icon: mdi:spotify, color: "#1ed760" }
       match:                                  # optional match-day pill on the screensaver
         sensor: sensor.next_home_match        # timestamp of kick-off; attributes: opponent
         label: Home                           # e.g. your team name

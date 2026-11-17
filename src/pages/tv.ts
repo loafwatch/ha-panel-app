@@ -16,7 +16,7 @@ export class PageTv extends PageBase {
   private repDelay?: number;
 
   protected watched() {
-    return (this.config.tv ?? []).flatMap((t) => [t.remote, t.media_player].filter(Boolean) as string[]);
+    return (this.config.tv ?? []).flatMap((t) => [t.remote, t.media_player, t.adb].filter(Boolean) as string[]);
   }
 
   private get tv(): TvConfig | undefined {
@@ -54,11 +54,12 @@ export class PageTv extends PageBase {
     this.stop();
   }
 
-  private launch(activity: string) {
+  private launch(a: NonNullable<TvConfig["apps"]>[number]) {
     const t = this.tv;
     if (!t) return;
     navigator.vibrate?.(8);
-    call(this.hass, "remote", "turn_on", { entity_id: t.remote, activity });
+    if (a.package && t.adb) call(this.hass, "media_player", "select_source", { entity_id: t.adb, source: a.package });
+    else if (a.activity) call(this.hass, "remote", "turn_on", { entity_id: t.remote, activity: a.activity });
   }
 
   private key(icon: string, command: string, cls = "", repeat = false) {
@@ -78,7 +79,7 @@ export class PageTv extends PageBase {
     const r = this.st(t.remote);
     const mp = this.st(t.media_player);
     const off = !r || r.state === "off" || r.state === "unavailable";
-    const app = mp?.attributes.app_name ?? r?.attributes.current_activity ?? "";
+    const app = mp?.attributes.app_name ?? this.st(t.adb)?.attributes.app_id ?? r?.attributes.current_activity ?? "";
     const title = mp?.attributes.media_title;
     const art = mp?.attributes.entity_picture;
     return html`
@@ -120,7 +121,7 @@ export class PageTv extends PageBase {
             ${t.apps?.length
               ? html`<div class="tile apps">
                   ${t.apps.map(
-                    (a) => html`<button class="app" style="--ac:${a.color ?? "var(--accent)"}" @click=${() => this.launch(a.activity)}>
+                    (a) => html`<button class="app" style="--ac:${a.color ?? "var(--accent)"}" @click=${() => this.launch(a)}>
                       <ha-icon icon=${a.icon ?? "mdi:application-outline"}></ha-icon><span>${a.name}</span>
                     </button>`,
                   )}
@@ -343,6 +344,11 @@ function prettyApp(a: string) {
     "com.google.android.youtube.tv": "YouTube",
     "com.netflix.ninja": "Netflix",
     "uk.co.bbc.iplayer": "BBC iPlayer",
+    "bbc.iplayer.android": "BBC iPlayer",
+    "ar.tvplayer.tv": "TiviMate",
+    "air.ITVMobilePlayer": "ITVX",
+    "com.channel4.ondemand": "Channel 4",
+    "com.channel5.my5": "Channel 5",
     "com.disney.disneyplus": "Disney+",
     "com.spotify.tv.android": "Spotify",
     "com.amazon.amazonvideo.livingroom": "Prime Video",

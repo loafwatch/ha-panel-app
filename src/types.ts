@@ -169,6 +169,11 @@ export interface TvConfig {
   remote: string;
   /** Matching media_player.* for what's on screen (optional). */
   media_player?: string;
-  /** App shortcuts: activity is an app link (https://…) or a package name. */
-  apps?: { name: string; activity: string; icon?: string; color?: string }[];
+  /**
+   * Optional media_player.* from the Android TV (ADB) integration. When set, apps with a
+   * `package` are opened by package name, which works for apps without an app link.
+   */
+  adb?: string;
+  /** App shortcuts: `package` (needs `adb`) or `activity`, an app link such as spotify://. */
+  apps?: { name: string; package?: string; activity?: string; icon?: string; color?: string }[];
 }
