@@ -68,6 +68,8 @@ export interface PanelConfig {
     rooms: RoomConfig[];
     /** input_select shared with voice automations for the chosen music room. */
     room_entity?: string;
+    /** Radio stations shown as a row of tiles: a Music Assistant URI (e.g. a BBC Sounds station) and a logo. */
+    radio?: { name: string; uri: string; image?: string }[];
   };
 
   lights?: LightRoomConfig[];

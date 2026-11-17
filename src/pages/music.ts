@@ -291,8 +291,34 @@ export class PageMusic extends PageBase {
     `;
   }
 
+  private radioRow() {
+    const st = this.config.music?.radio;
+    if (!st?.length) return nothing;
+    const r = this.room;
+    const now = r ? this.st(r.player) : undefined;
+    const playingUri = String(now?.attributes.media_content_id ?? "");
+    return html`<div class="sec">Radio</div>
+      <div class="radio">
+        ${st.map((s) => {
+          const on = !!playingUri && (playingUri === s.uri || playingUri.endsWith(s.uri.split("/").pop() ?? "\u0000"));
+          return html`<button class="station ${on ? "on" : ""}" @click=${() => this.playRadio(s.uri, s.name)} aria-label=${s.name}>
+            <span class="logo" style=${s.image ? `background-image:url("${s.image}")` : ""}>${s.image ? nothing : html`<ha-icon icon="mdi:radio"></ha-icon>`}</span>
+            <span class="sn">${s.name.replace(/^BBC (Radio )?/, "")}</span>
+          </button>`;
+        })}
+      </div>`;
+  }
+
+  private playRadio(uri: string, name: string) {
+    const r = this.room;
+    if (!r) return;
+    call(this.hass, "music_assistant", "play_media", { entity_id: r.player, media_id: uri, media_type: "radio", enqueue: "replace" });
+    this.toast(`Playing ${name} in ${r.name}`);
+  }
+
   private lists(live: boolean) {
     return html`
+      ${this.radioRow()}
       ${live
         ? html`<div class="sec">Up next</div>
             ${this.next
@@ -648,6 +674,50 @@ export class PageMusic extends PageBase {
       }
       .sec:first-child {
         margin-top: 4px;
+      }
+      .radio {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+        gap: 8px;
+      }
+      .station {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 0;
+        background: none;
+        border: 0;
+        color: var(--text);
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .station .logo {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 14px;
+        background: var(--tile-2) center / cover no-repeat;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 0 2px transparent;
+        transition: box-shadow 0.2s, transform 0.15s;
+      }
+      .station:active .logo {
+        transform: scale(0.96);
+      }
+      .station.on .logo {
+        box-shadow: 0 0 0 3px var(--accent), 0 0 14px var(--accent-soft);
+      }
+      .station .sn {
+        font-size: 11px;
+        color: var(--text-2);
+        text-align: center;
+        line-height: 1.2;
+      }
+      .station.on .sn {
+        color: var(--text);
+        font-weight: 600;
       }
       .sec span {
         color: var(--text-2);

@@ -16,6 +16,8 @@ panel_custom:
         - { name: Shopping, entity: todo.shopping, icon: "mdi:cart-outline" }
       music:
         room_entity: input_select.music_room  # optional, shared with voice automations
+        radio:                                  # optional station tiles (Music Assistant URIs)
+          - { name: Station 1, uri: "bbc_sounds://radio/example", image: "https://example.com/logo.png" }
         rooms:
           - name: Room A
             player: media_player.room_a_music        # Music Assistant player
