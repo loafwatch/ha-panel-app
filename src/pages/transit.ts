@@ -53,7 +53,16 @@ export class PageTransit extends PageBase {
       }
       if (at) out.push({ at, live: !!r.live, to: r.to });
     }
-    return out.sort((x, y) => x.at.getTime() - y.at.getTime());
+    // Boards can list the same departure more than once (e.g. an "all" and a per-line tab).
+    const seen = new Set<string>();
+    return out
+      .sort((x, y) => x.at.getTime() - y.at.getTime())
+      .filter((d) => {
+        const k = d.at.getTime() + "|" + d.to;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
   }
 
   /** Vehicles on the line in one direction, from upcoming departures plus the
@@ -126,7 +135,7 @@ export class PageTransit extends PageBase {
     const arrivals = inbound;
     const arrivalsA = inbound.map((v) => v.eta!);
     const dwell = (dep: Dep) => {
-      const arr = arrivalsA.filter((x) => x <= dep.at.getTime() + 60_000 && x > dep.at.getTime() - 25 * 60_000).sort((p, q) => q - p)[0];
+      const arr = arrivalsA.filter((x) => x <= dep.at.getTime() - 60_000 && x > dep.at.getTime() - 25 * 60_000).sort((p, q) => q - p)[0];
       return arr ? new Date(arr) : undefined;
     };
     const catchable = walk ? nextA.find((d) => d.at.getTime() - now >= walk * 60_000) : undefined;
