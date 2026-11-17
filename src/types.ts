@@ -138,6 +138,9 @@ export interface TransitConfig {
   headway_min?: number;
   /** Walking time from the house to terminus A, in minutes; drives the "leave now?" advice. */
   walk_min?: number;
+  /** The stop before A on the way in, with its board sensor and the run time to A. Gives real
+   *  (timetabled or live) arrival times at A and the window the vehicle waits there. */
+  approach?: { name: string; sensor: string; run_min: number };
   /** How long a vehicle typically waits at terminus A before leaving. When set, arrivals at A are
    *  shown as each departure minus this, instead of being estimated from the run from B. */
   layover_min?: number;

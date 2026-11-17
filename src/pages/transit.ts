@@ -31,7 +31,7 @@ export class PageTransit extends PageBase {
 
   protected watched() {
     const t = this.config.transit;
-    return [t?.a.sensor, t?.b.sensor].filter(Boolean) as string[];
+    return [t?.a.sensor, t?.b.sensor, t?.approach?.sensor].filter(Boolean) as string[];
   }
 
   /** Parse a board's departures into dates (today, or tomorrow if the time has passed by hours). */
@@ -135,8 +135,18 @@ export class PageTransit extends PageBase {
     // estimated time the next tram reaches A: the matching run from B plus the run time
     const runBA = t.stops[0].ba;
     const lay = t.layover_min;
+    const ap = t.approach;
+    const apDeps = ap ? this.deps(ap.sensor).filter((d) => d.to.trim().toLowerCase() === t.a.name.trim().toLowerCase()) : [];
+    /** arrival at A of the vehicle that forms departure `dep`: the latest approach departure that gets in before it */
+    const formsFrom = (dep: Dep) => {
+      if (!ap) return undefined;
+      const c = apDeps.filter((x) => x.at.getTime() + ap.run_min * 60_000 <= dep.at.getTime() - 60_000).pop();
+      return c ? { left: c.at, arr: new Date(c.at.getTime() + ap.run_min * 60_000), live: c.live } : undefined;
+    };
     const inbound = (
-      lay != null
+      ap
+        ? apDeps.map((d) => ({ dir: "ba" as const, frac: 1, stop: "", label: "", live: d.live, eta: d.at.getTime() + ap.run_min * 60_000, left: d.at.getTime() }))
+        : lay != null
         ? depsA.map((d) => ({ dir: "ba" as const, frac: 1, stop: "", label: "", live: d.live, eta: d.at.getTime() - lay * 60_000 }))
         : this.vehicles("ba", depsB, true)
     )
@@ -162,7 +172,11 @@ export class PageTransit extends PageBase {
                     <span class="sub"><b>leaves in ${minsWord(first.at)}</b><span>to ${first.to}${first.live ? html` <i class="live">live</i>` : nothing}</span></span>
                   </div>
                   <div class="muted plat">
-                    ${lay != null
+                    ${ap && formsFrom(first)
+                      ? html`On the platform from about ${hm(formsFrom(first)!.arr)} · leaves ${ap.name} ${hm(formsFrom(first)!.left)}`
+                      : ap && depsA.length && apDeps.length
+                      ? html`Already past ${ap.name}, so it should be waiting at the platform now`
+                      : lay != null
                       ? html`On the platform from about ${hm(new Date(first.at.getTime() - lay * 60_000))} (usually waits ${lay} min)`
                       : firstArr
                         ? html`Due on the platform from about ${hm(firstArr)} (${Math.max(0, Math.round((first.at.getTime() - firstArr.getTime()) / 60_000))} min turnaround, estimated)`
@@ -191,10 +205,10 @@ export class PageTransit extends PageBase {
             ${arrivals.length
               ? html`<div class="first">
                     <span class="mins">${hm(new Date(arrivals[0].eta!))}</span>
-                    <span class="sub"><b>in ${minsWord(new Date(arrivals[0].eta!))}</b><span>from ${t.b.name}${arrivals[0].live ? html` <i class="live">live</i>` : nothing}</span></span>
+                    <span class="sub"><b>in ${minsWord(new Date(arrivals[0].eta!))}</b><span>${ap && (arrivals[0] as any).left ? `from ${ap.name} ${hm(new Date((arrivals[0] as any).left))}` : `from ${t.b.name}`}${arrivals[0].live ? html` <i class="live">live</i>` : nothing}</span></span>
                   </div>
                   <div class="more">Then ${arrivals.slice(1, 4).map((v) => html`<span>${hm(new Date(v.eta!))}</span>`)}</div>
-                  <div class="muted plat">${lay != null ? `Estimated: trams usually wait about ${lay} min before leaving` : `Estimated from the ${runBA} min run from ${t.b.name}`}</div>`
+                  <div class="muted plat">${ap ? `${ap.name} board plus the ${ap.run_min} min hop` : lay != null ? `Estimated: trams usually wait about ${lay} min before leaving` : `Estimated from the ${runBA} min run from ${t.b.name}`}</div>`
               : html`<div class="empty">${stale ? "Waiting for the departure board…" : "No inbound trams listed"}</div>`}
           </div>
         </div>
