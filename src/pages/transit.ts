@@ -35,12 +35,15 @@ export class PageTransit extends PageBase {
   }
 
   /** Parse a board's departures into dates (today, or tomorrow if the time has passed by hours). */
-  private deps(sensor: string): Dep[] {
+  private deps(sensor: string, stop?: string): Dep[] {
     const st = this.st(sensor);
     const rows = (st?.attributes.departures ?? []) as TransitDeparture[];
     const now = new Date();
     const out: Dep[] = [];
+    const here = (stop ?? "").trim().toLowerCase();
     for (const r of rows) {
+      // a terminus board also lists trams terminating there ("to <this stop>"); those aren't departures
+      if (here && String(r.to ?? "").trim().toLowerCase() === here) continue;
       let at: Date | undefined;
       const t = String(r.time ?? "").trim();
       const hm = t.match(/^(\d{1,2}):(\d{2})$/);
@@ -117,8 +120,8 @@ export class PageTransit extends PageBase {
   render() {
     const t = this.config.transit;
     if (!t) return html`<div class="page"><div class="empty">No transit line configured.</div></div>`;
-    const depsA = this.deps(t.a.sensor);
-    const depsB = this.deps(t.b.sensor);
+    const depsA = this.deps(t.a.sensor, t.a.name);
+    const depsB = this.deps(t.b.sensor, t.b.name);
     const now = Date.now();
     const nextA = depsA.filter((d) => d.at.getTime() >= now - 60_000).slice(0, 4);
     const nextB = depsB.filter((d) => d.at.getTime() >= now - 60_000).slice(0, 3);
