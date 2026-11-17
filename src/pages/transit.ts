@@ -159,7 +159,7 @@ export class PageTransit extends PageBase {
             ${first
               ? html`<div class="first">
                     <span class="mins">${hm(first.at)}</span>
-                    <span class="sub"><b>leaves in ${minsWord(first.at)}</b><br />to ${first.to}${first.live ? html` <i class="live">live</i>` : nothing}</span>
+                    <span class="sub"><b>leaves in ${minsWord(first.at)}</b><span>to ${first.to}${first.live ? html` <i class="live">live</i>` : nothing}</span></span>
                   </div>
                   <div class="muted plat">
                     ${lay != null
@@ -191,7 +191,7 @@ export class PageTransit extends PageBase {
             ${arrivals.length
               ? html`<div class="first">
                     <span class="mins">${hm(new Date(arrivals[0].eta!))}</span>
-                    <span class="sub"><b>in ${minsWord(new Date(arrivals[0].eta!))}</b><br />from ${t.b.name}${arrivals[0].live ? html` <i class="live">live</i>` : nothing}</span>
+                    <span class="sub"><b>in ${minsWord(new Date(arrivals[0].eta!))}</b><span>from ${t.b.name}${arrivals[0].live ? html` <i class="live">live</i>` : nothing}</span></span>
                   </div>
                   <div class="more">Then ${arrivals.slice(1, 4).map((v) => html`<span>${hm(new Date(v.eta!))}</span>`)}</div>
                   <div class="muted plat">${lay != null ? `Estimated: trams usually wait about ${lay} min before leaving` : `Estimated from the ${runBA} min run from ${t.b.name}`}</div>`
@@ -255,27 +255,31 @@ export class PageTransit extends PageBase {
       }
       .next .first {
         display: flex;
-        align-items: baseline;
-        gap: 14px;
-        margin-top: 6px;
+        align-items: center;
+        gap: 16px;
+        margin-top: 8px;
       }
-      .mins {
-        font-size: 64px;
-        font-weight: 500;
+      /* one time style for all three cards */
+      .mins,
+      .now {
+        font-size: 60px;
+        font-weight: 400;
         line-height: 1;
+        letter-spacing: -0.01em;
         font-variant-numeric: tabular-nums;
       }
-      .next.b .mins {
-        font-size: 44px;
-      }
       .sub {
-        font-size: 17px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 16px;
         color: var(--text-2);
-        line-height: 1.3;
+        line-height: 1.25;
       }
       .sub b {
         color: var(--text);
-        font-size: 20px;
+        font-size: 19px;
+        font-weight: 600;
       }
       .plat {
         font-size: 13px;
@@ -311,12 +315,7 @@ export class PageTransit extends PageBase {
       .verdict b {
         font-size: 1.1em;
       }
-      .next.b .sub {
-        font-size: 15px;
-      }
-      .next.b .sub b {
-        font-size: 17px;
-      }
+
       .clock {
         display: flex;
         flex-direction: column;
@@ -324,13 +323,7 @@ export class PageTransit extends PageBase {
         justify-content: center;
         text-align: center;
       }
-      .now {
-        font-size: 64px;
-        font-weight: 300;
-        line-height: 1;
-        letter-spacing: -0.02em;
-        font-variant-numeric: tabular-nums;
-      }
+
       .walk {
         margin-top: 12px;
         display: flex;
