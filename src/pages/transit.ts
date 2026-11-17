@@ -134,7 +134,14 @@ export class PageTransit extends PageBase {
     const walk = t.walk_min ?? 0;
     // estimated time the next tram reaches A: the matching run from B plus the run time
     const runBA = t.stops[0].ba;
-    const inbound = this.vehicles("ba", depsB, true).filter((v) => v.eta != null && v.eta >= now - 60_000).sort((p, q) => p.eta! - q.eta!);
+    const lay = t.layover_min;
+    const inbound = (
+      lay != null
+        ? depsA.map((d) => ({ dir: "ba" as const, frac: 1, stop: "", label: "", live: d.live, eta: d.at.getTime() - lay * 60_000 }))
+        : this.vehicles("ba", depsB, true)
+    )
+      .filter((v) => v.eta != null && v.eta >= now - 60_000)
+      .sort((p, q) => p.eta! - q.eta!);
     const arrivals = inbound;
     const arrivalsA = inbound.map((v) => v.eta!);
     const dwell = (dep: Dep) => {
@@ -155,9 +162,11 @@ export class PageTransit extends PageBase {
                     <span class="sub"><b>leaves in ${minsWord(first.at)}</b><br />to ${first.to}${first.live ? html` <i class="live">live</i>` : nothing}</span>
                   </div>
                   <div class="muted plat">
-                    ${firstArr
-                      ? html`Due on the platform from about ${hm(firstArr)} (${Math.max(0, Math.round((first.at.getTime() - firstArr.getTime()) / 60_000))} min turnaround, estimated)`
-                      : html`Platform time unknown until the previous tram's run can be matched`}
+                    ${lay != null
+                      ? html`On the platform from about ${hm(new Date(first.at.getTime() - lay * 60_000))} (usually waits ${lay} min)`
+                      : firstArr
+                        ? html`Due on the platform from about ${hm(firstArr)} (${Math.max(0, Math.round((first.at.getTime() - firstArr.getTime()) / 60_000))} min turnaround, estimated)`
+                        : html`Platform time unknown until the previous tram's run can be matched`}
                   </div>
                   ${walk
                     ? catchable
@@ -185,7 +194,7 @@ export class PageTransit extends PageBase {
                     <span class="sub"><b>in ${minsWord(new Date(arrivals[0].eta!))}</b><br />from ${t.b.name}${arrivals[0].live ? html` <i class="live">live</i>` : nothing}</span>
                   </div>
                   <div class="more">Then ${arrivals.slice(1, 4).map((v) => html`<span>${hm(new Date(v.eta!))}</span>`)}</div>
-                  <div class="muted plat">Estimated from the ${runBA} min run from ${t.b.name}</div>`
+                  <div class="muted plat">${lay != null ? `Estimated: trams usually wait about ${lay} min before leaving` : `Estimated from the ${runBA} min run from ${t.b.name}`}</div>`
               : html`<div class="empty">${stale ? "Waiting for the departure board…" : "No inbound trams listed"}</div>`}
           </div>
         </div>

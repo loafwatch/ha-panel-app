@@ -138,6 +138,9 @@ export interface TransitConfig {
   headway_min?: number;
   /** Walking time from the house to terminus A, in minutes; drives the "leave now?" advice. */
   walk_min?: number;
+  /** How long a vehicle typically waits at terminus A before leaving. When set, arrivals at A are
+   *  shown as each departure minus this, instead of being estimated from the run from B. */
+  layover_min?: number;
 }
 
 export interface PanelInfo {

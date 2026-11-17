@@ -65,6 +65,7 @@ panel_custom:
         home: Terminus A
         headway_min: 12
         walk_min: 10       # walk from the house to terminus A, for "leave now?" advice
+        layover_min: 5     # optional: how long vehicles wait at A before leaving
         stops:          # ab = minutes after leaving A, ba = minutes after leaving B
           - { name: Terminus A, ab: 0, ba: 20 }
           - { name: Middle stop, ab: 10, ba: 10, major: true }
