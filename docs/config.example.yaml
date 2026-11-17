@@ -56,6 +56,13 @@ panel_custom:
         satellite: assist_satellite.example_tablet
         stt: sensor.example_tablet_stt
         tts: sensor.example_tablet_tts
+      tv:                                     # optional TV remote page (Android TV Remote integration)
+        - name: Living room
+          remote: remote.example_tv
+          media_player: media_player.example_tv
+          apps:
+            - { name: YouTube, activity: "https://www.youtube.com", icon: mdi:youtube, color: "#ff0033" }
+            - { name: Netflix, activity: "https://www.netflix.com/title", icon: mdi:netflix, color: "#e50914" }
       match:                                  # optional match-day pill on the screensaver
         sensor: sensor.next_home_match        # timestamp of kick-off; attributes: opponent
         label: Home                           # e.g. your team name

@@ -118,6 +118,8 @@ export interface PanelConfig {
    */
   match?: { sensor: string; label?: string; color?: string; icon?: string };
   media?: { url: string; title?: string };
+  /** TV remotes (Android TV Remote integration). */
+  tv?: TvConfig[];
   transit?: TransitConfig;
 }
 
@@ -159,4 +161,14 @@ export interface PanelInfo {
   config: PanelConfig;
 }
 
-export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit";
+export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv";
+
+export interface TvConfig {
+  name?: string;
+  /** remote.* entity from the Android TV Remote integration. */
+  remote: string;
+  /** Matching media_player.* for what's on screen (optional). */
+  media_player?: string;
+  /** App shortcuts: activity is an app link (https://…) or a package name. */
+  apps?: { name: string; activity: string; icon?: string; color?: string }[];
+}
