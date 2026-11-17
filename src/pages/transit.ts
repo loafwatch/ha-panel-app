@@ -200,17 +200,6 @@ export class PageTransit extends PageBase {
             <div class="muted">${fmtDay(new Date())}</div>
             ${walk ? html`<div class="muted walk"><ha-icon icon="mdi:walk"></ha-icon>${walk} min walk to ${t.a.name}</div>` : nothing}
           </div>
-          <div class="tile next b">
-            <div class="label"><ha-icon icon="mdi:tram"></ha-icon>Arriving at ${t.a.name}</div>
-            ${arrivals.length
-              ? html`<div class="first">
-                    <span class="mins">${hm(new Date(arrivals[0].eta!))}</span>
-                    <span class="sub"><b>in ${minsWord(new Date(arrivals[0].eta!))}</b><span>${ap && (arrivals[0] as any).left ? `from ${ap.name} ${hm(new Date((arrivals[0] as any).left))}` : `from ${t.b.name}`}${arrivals[0].live ? html` <i class="live">live</i>` : nothing}</span></span>
-                  </div>
-                  <div class="more">Then ${arrivals.slice(1, 4).map((v) => html`<span>${hm(new Date(v.eta!))}</span>`)}</div>
-                  <div class="muted plat">${ap ? `${ap.name} board plus the ${ap.run_min} min hop` : lay != null ? `Estimated: trams usually wait about ${lay} min before leaving` : `Estimated from the ${runBA} min run from ${t.b.name}`}</div>`
-              : html`<div class="empty">${stale ? "Waiting for the departure board…" : "No inbound trams listed"}</div>`}
-          </div>
         </div>
         <div class="tile map">
           <div class="chead">
@@ -263,7 +252,7 @@ export class PageTransit extends PageBase {
     css`
       .top {
         display: grid;
-        grid-template-columns: minmax(0, 1.5fr) minmax(200px, 0.8fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
         gap: var(--gap);
         margin-bottom: var(--gap);
       }
