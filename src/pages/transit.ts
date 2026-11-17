@@ -209,7 +209,7 @@ export class PageTransit extends PageBase {
               ${updated ? html` · board ${hm(updated)}` : nothing}
             </div>
           </div>
-          ${this.strip(t, vehicles, home)}
+          <div class="mapwrap">${this.strip(t, vehicles, home)}</div>
           <div class="legend muted">
             <span><i class="veh ab"></i>towards ${t.b.name}</span>
             <span><i class="veh ba"></i>towards ${t.a.name}</span>
@@ -436,6 +436,22 @@ export class PageTransit extends PageBase {
         .top {
           grid-template-columns: 1fr 1fr;
         }
+      }
+      @container (max-width: 640px) {
+        .top {
+          grid-template-columns: 1fr;
+        }
+        /* the line map keeps its proportions and scrolls sideways */
+        .mapwrap {
+          overflow-x: auto;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+        }
+        .mapwrap .svg {
+          min-width: 900px;
+        }
+      }
+      @container (max-width: 900px) {
         .clock {
           order: -1;
           grid-column: 1 / -1;

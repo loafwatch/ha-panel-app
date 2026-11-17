@@ -404,6 +404,35 @@ export class PageEnergy extends PageBase {
         min-height: 120px;
         height: auto;
       }
+      /* phones: let the page scroll and give the chart a fixed height */
+      @media (max-width: 700px) {
+        .page.fill {
+          height: auto;
+          overflow: visible;
+        }
+        .cards {
+          grid-template-columns: 1fr;
+        }
+        .chart {
+          flex: none;
+        }
+        .chart .bars {
+          flex: none;
+          height: 240px;
+        }
+        .huge {
+          font-size: 48px !important;
+        }
+        .devrow {
+          flex-wrap: nowrap !important;
+          scrollbar-width: none;
+          overflow-x: auto;
+          padding-bottom: 4px;
+        }
+        .devrow > * {
+          flex: none;
+        }
+      }
       .huge {
         font-size: 64px;
         font-weight: 300;
