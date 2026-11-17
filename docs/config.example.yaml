@@ -61,6 +61,7 @@ panel_custom:
           remote: remote.example_tv
           media_player: media_player.example_tv
           adb: media_player.example_tv_adb    # optional Android TV (ADB) entity: open apps by package name
+          volume: { remote: remote.example_samsung_tv }   # optional: send volume to the TV instead
           apps:
             - { name: YouTube, package: com.google.android.youtube.tv, icon: mdi:youtube, color: "#ff0033" }
             - { name: Spotify, activity: "spotify://", icon: mdi:spotify, color: "#1ed760" }

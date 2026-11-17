@@ -174,6 +174,11 @@ export interface TvConfig {
    * `package` are opened by package name, which works for apps without an app link.
    */
   adb?: string;
+  /**
+   * Send volume and mute to a different remote, e.g. the TV itself when the streaming box
+   * can't reach a soundbar. Commands default to Samsung's KEY_VOLUP / KEY_VOLDOWN / KEY_MUTE.
+   */
+  volume?: { remote: string; up?: string; down?: string; mute?: string };
   /** App shortcuts: `package` (needs `adb`) or `activity`, an app link such as spotify://. */
   apps?: { name: string; package?: string; activity?: string; icon?: string; color?: string }[];
 }

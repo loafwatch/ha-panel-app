@@ -28,7 +28,10 @@ export class PageTv extends PageBase {
     const t = this.tv;
     if (!t) return;
     navigator.vibrate?.(8);
-    call(this.hass, "remote", "send_command", { entity_id: t.remote, command });
+    const v = t.volume;
+    const vk: Record<string, string> = { VOLUME_UP: v?.up ?? "KEY_VOLUP", VOLUME_DOWN: v?.down ?? "KEY_VOLDOWN", VOLUME_MUTE: v?.mute ?? "KEY_MUTE" };
+    if (v && vk[command]) call(this.hass, "remote", "send_command", { entity_id: v.remote, command: vk[command] });
+    else call(this.hass, "remote", "send_command", { entity_id: t.remote, command });
   }
 
   /** Press-and-hold repeats (for scrolling lists and volume). */
