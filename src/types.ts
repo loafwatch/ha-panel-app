@@ -112,6 +112,11 @@ export interface PanelConfig {
   };
 
   photos?: { url: string };
+  /**
+   * Match-day pill on the screensaver: a timestamp sensor holding the next home kick-off
+   * (attributes: opponent, competition). Shown only on the day of the match.
+   */
+  match?: { sensor: string; label?: string; color?: string; icon?: string };
   media?: { url: string; title?: string };
   transit?: TransitConfig;
 }

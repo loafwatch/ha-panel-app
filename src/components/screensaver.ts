@@ -79,6 +79,11 @@ export class PanelScreensaver extends LitElement {
     // energy saving session: show today's (glowing while it's on) or the next one within two days
     const sv = this.hub.savings.find((e) => e.end > now && e.start.getTime() - now.getTime() < 2 * 86400000);
     const svLive = !!sv && sv.start <= now;
+    // match day: the next home kick-off, shown from the morning until about 2½ hours after kick-off
+    const mc = c.match;
+    const ms = mc ? this.hass.states[mc.sensor] : undefined;
+    const ko = ms && !["unknown", "unavailable", ""].includes(ms.state) ? new Date(ms.state) : undefined;
+    const matchDay = !!ko && !isNaN(ko.getTime()) && ko.toDateString() === now.toDateString() && now.getTime() < ko.getTime() + 2.5 * 3600000;
     const url = c.photos?.url ? c.photos.url + (c.photos.url.includes("?") ? "&" : "?") + "n=" + this.n : "";
     return html`
       <div class="ss">
@@ -96,6 +101,13 @@ export class PanelScreensaver extends LitElement {
         <div class="side">
           ${bins?.due
             ? html`<div class="pill bin" style="--bin:${bins.next?.color ?? "#ff2e97"}"><ha-icon icon="mdi:trash-can-outline"></ha-icon>${bins.next?.name ?? "Bin"} out tonight</div>`
+            : nothing}
+          ${matchDay && ko && mc
+            ? html`<div class="pill match ${now >= ko ? "live" : ""}" style="--mc:${mc.color ?? "#2f6bff"}">
+                <ha-icon icon=${mc.icon ?? "mdi:soccer"}></ha-icon>${now >= ko
+                  ? `${mc.label ? mc.label + " " : ""}v ${ms!.attributes.opponent ?? ""} · on now`
+                  : `${mc.label ? mc.label + " " : "Home "}v ${ms!.attributes.opponent ?? ""} · KO ${fmtTime(ko)}`}
+              </div>`
             : nothing}
           ${sv
             ? html`<div class="pill save ${svLive ? "live" : ""}">
@@ -225,6 +237,21 @@ export class PanelScreensaver extends LitElement {
       .pill.bin {
         border: 2px solid var(--bin);
         animation: binpulse 2s ease-in-out infinite;
+      }
+      .pill.match {
+        border: 2px solid var(--mc);
+        box-shadow: 0 0 14px color-mix(in srgb, var(--mc) 55%, transparent);
+      }
+      .pill.match ha-icon {
+        color: color-mix(in srgb, var(--mc) 60%, white);
+      }
+      .pill.match.live {
+        animation: matchpulse 2s ease-in-out infinite;
+      }
+      @keyframes matchpulse {
+        50% {
+          box-shadow: 0 0 0 3px var(--mc), 0 0 24px var(--mc);
+        }
       }
       .pill.save {
         border: 2px solid #00c8d4;
