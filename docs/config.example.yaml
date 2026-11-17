@@ -41,6 +41,10 @@ panel_custom:
         rate: sensor.example_rate
         costs:
           - { name: Electricity, entity: sensor.example_electricity_cost, icon: "mdi:flash" }
+        octopus:                              # optional Octopus Energy extras
+          saving_calendar: calendar.octopus_saving_sessions
+          points: sensor.octoplus_points
+          spins: [sensor.free_spins_electricity, sensor.free_spins_gas]
         devices:                              # appliances on smart plugs (optional)
           - { name: Dishwasher, icon: mdi:dishwasher, power: sensor.plug_1_current_consumption, energy: sensor.plug_1_today_s_consumption }
       bins:

@@ -76,6 +76,9 @@ export class PanelScreensaver extends LitElement {
     const next = this.hub.events.find((e) => e.end.getTime() > from.getTime() && (now.getHours() < 19 || e.start.getTime() >= from.getTime()));
     const rem = (c.todo_lists?.[0] ? this.hub.todos[c.todo_lists[0].entity] ?? [] : []).filter((i) => i.status === "needs_action");
     const bins = binsInfo(this.hass, c);
+    // energy saving session: show today's (glowing while it's on) or the next one within two days
+    const sv = this.hub.savings.find((e) => e.end > now && e.start.getTime() - now.getTime() < 2 * 86400000);
+    const svLive = !!sv && sv.start <= now;
     const url = c.photos?.url ? c.photos.url + (c.photos.url.includes("?") ? "&" : "?") + "n=" + this.n : "";
     return html`
       <div class="ss">
@@ -93,6 +96,13 @@ export class PanelScreensaver extends LitElement {
         <div class="side">
           ${bins?.due
             ? html`<div class="pill bin" style="--bin:${bins.next?.color ?? "#ff2e97"}"><ha-icon icon="mdi:trash-can-outline"></ha-icon>${bins.next?.name ?? "Bin"} out tonight</div>`
+            : nothing}
+          ${sv
+            ? html`<div class="pill save ${svLive ? "live" : ""}">
+                <ha-icon icon=${svLive ? "mdi:lightning-bolt-circle" : "mdi:leaf"}></ha-icon>${svLive
+                  ? `Saving session now · until ${fmtTime(sv.end)}`
+                  : `Saving session ${dayLabel(sv.start)} ${fmtTime(sv.start)}–${fmtTime(sv.end)}`}
+              </div>`
             : nothing}
           ${next
             ? html`<div class="pill"><ha-icon icon="mdi:calendar"></ha-icon>${dayLabel(next.start)}${next.allDay ? "" : " " + fmtTime(next.start)} · ${next.summary}</div>`
@@ -215,6 +225,20 @@ export class PanelScreensaver extends LitElement {
       .pill.bin {
         border: 2px solid var(--bin);
         animation: binpulse 2s ease-in-out infinite;
+      }
+      .pill.save {
+        border: 2px solid #00c8d4;
+      }
+      .pill.save ha-icon {
+        color: #00e5f0;
+      }
+      .pill.save.live {
+        animation: savepulse 2s ease-in-out infinite;
+      }
+      @keyframes savepulse {
+        50% {
+          box-shadow: 0 0 0 3px #00c8d4, 0 0 24px #00c8d4;
+        }
       }
       @keyframes binpulse {
         50% {

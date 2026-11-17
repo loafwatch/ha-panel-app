@@ -2,6 +2,7 @@ import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
+import { fmtTime } from "../util";
 
 type Range = "day" | "week" | "month" | "year";
 type Kind = "electricity" | "gas";
@@ -41,7 +42,7 @@ export class PageEnergy extends PageBase {
 
   protected watched() {
     const e = this.config.energy;
-    return [e?.power, e?.rate, ...(e?.costs ?? []).map((c) => c.entity), ...(e?.devices ?? []).map((d) => d.power)].filter(Boolean) as string[];
+    return [e?.power, e?.rate, ...(e?.costs ?? []).map((c) => c.entity), ...(e?.devices ?? []).map((d) => d.power), e?.octopus?.points, ...(e?.octopus?.spins ?? [])].filter(Boolean) as string[];
   }
 
   protected updated(c: Map<string, unknown>) {
@@ -199,6 +200,7 @@ export class PageEnergy extends PageBase {
                 <div class="split">
                   ${costs.map((c) => html`<div><ha-icon icon=${c.icon ?? "mdi:currency-gbp"}></ha-icon>${c.name}<b>£${c.v.toFixed(2)}</b></div>`)}
                 </div>
+                ${this.octoplus()}
               </div>`
             : nothing}
         </div>
@@ -288,6 +290,23 @@ export class PageEnergy extends PageBase {
       </div>
       <div class="axis muted">${bars.map((b, i) => html`<span>${this.tickLabel(b.t, i)}</span>`)}</div>
     `;
+  }
+
+  /** Octoplus line: points, free spins and the next saving session. */
+  private octoplus() {
+    const o = this.config.energy?.octopus;
+    if (!o) return nothing;
+    const pts = Number(this.st(o.points)?.state);
+    const spins = (o.spins ?? []).reduce((n, id) => n + (Number(this.st(id)?.state) || 0), 0);
+    const next = this.hub.savings[0];
+    const bits = [];
+    if (!isNaN(pts)) bits.push(html`<span><ha-icon icon="mdi:trophy-outline"></ha-icon>${pts.toLocaleString("en-GB")} Octopoints</span>`);
+    if (spins > 0) bits.push(html`<span><ha-icon icon="mdi:star-circle-outline"></ha-icon>${spins} free spin${spins === 1 ? "" : "s"}</span>`);
+    if (next)
+      bits.push(
+        html`<span class="sv"><ha-icon icon="mdi:leaf"></ha-icon>Saving session ${next.start.toDateString() === new Date().toDateString() ? "today" : next.start.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${fmtTime(next.start)}</span>`,
+      );
+    return bits.length ? html`<div class="octo">${bits}</div>` : nothing;
   }
 
   /** Live draw for a chip: "· 70 W", "· 1.8 kW", or nothing when off/unknown. */
@@ -441,6 +460,28 @@ export class PageEnergy extends PageBase {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+      }
+      .octo {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(127, 127, 127, 0.14);
+        font-size: 13px;
+        color: var(--text-2);
+      }
+      .octo span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .octo ha-icon {
+        --mdc-icon-size: 16px;
+      }
+      .octo .sv {
+        color: var(--cy);
+        font-weight: 600;
       }
       .devrow {
         display: flex;

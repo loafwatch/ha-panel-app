@@ -91,6 +91,8 @@ export interface PanelConfig {
     power?: string;
     rate?: string;
     costs?: NamedEntity[];
+    /** Octopus Energy extras: saving-session calendar, Octoplus points and free-spin counters. */
+    octopus?: { saving_calendar?: string; points?: string; spins?: string[] };
     /** Individual appliances on smart plugs: live power (W) and an energy sensor (kWh, total_increasing). */
     devices?: { name: string; icon?: string; power?: string; energy?: string }[];
   };

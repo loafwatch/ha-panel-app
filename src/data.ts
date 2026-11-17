@@ -103,10 +103,21 @@ export class DataHub extends EventTarget {
     if (!this.hass || !cals.length) return;
     this.events = await this.fetchEvents(new Date(new Date().setHours(0, 0, 0, 0)), days);
     this.changed();
+    this.refreshSavings();
   }
 
-  async fetchEvents(from: Date, days: number): Promise<CalEvent[]> {
-    const cals = this.config.calendars ?? [];
+  /** Upcoming energy saving sessions (from energy.octopus.saving_calendar), next 14 days. */
+  savings: CalEvent[] = [];
+
+  async refreshSavings() {
+    const cal = this.config.energy?.octopus?.saving_calendar;
+    if (!this.hass || !cal) return;
+    this.savings = (await this.fetchEvents(new Date(new Date().setHours(0, 0, 0, 0)), 14, [cal])).filter((e) => e.end.getTime() > Date.now());
+    this.changed();
+  }
+
+  async fetchEvents(from: Date, days: number, calendars?: string[]): Promise<CalEvent[]> {
+    const cals = calendars ?? this.config.calendars ?? [];
     if (!this.hass || !cals.length) return [];
     const to = new Date(from.getTime() + days * 86400000);
     try {

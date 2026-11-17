@@ -36,6 +36,7 @@ export class PageHome extends PageBase {
     const now = new Date();
     return html`
       <div class="page">
+        ${this.savingBanner()}
         ${this.binsBanner()}
         <div class="grid">
           <div class="col">${this.clockTile(now)} ${this.upcomingTile()}</div>
@@ -306,16 +307,39 @@ export class PageHome extends PageBase {
             : nothing}
         </div>
         ${powerWave(w)}
-        ${en.devices?.length
-          ? html`<div class="devs">
-              ${en.devices.map((d) => {
-                const dw = Number(this.st(d.power)?.state);
-                const on = dw >= 5;
-                return html`<span class="dev ${on ? "on" : ""}"><ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}
-                  <b>${isNaN(dw) ? "–" : on ? (dw >= 1000 ? (dw / 1000).toFixed(1) + " kW" : Math.round(dw) + " W") : "off"}</b></span>`;
-              })}
-            </div>`
-          : nothing}
+        ${(() => {
+          const running = (en.devices ?? [])
+            .map((d) => ({ d, w: Number(this.st(d.power)?.state) }))
+            .filter((x) => x.w >= 5 && !/server/i.test(x.d.name))
+            .sort((p, q) => q.w - p.w)
+            .slice(0, 3);
+          return running.length
+            ? html`<div class="devs">
+                ${running.map(
+                  ({ d, w: dw }) => html`<span class="dev on"><ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}
+                    <b>${dw >= 1000 ? (dw / 1000).toFixed(1) + " kW" : Math.round(dw) + " W"}</b></span>`,
+                )}
+              </div>`
+            : nothing;
+        })()}
+      </div>
+    `;
+  }
+
+  /** Energy saving session today: a heads-up before it starts and a glowing banner during it. */
+  private savingBanner() {
+    const now = new Date();
+    const s = this.hub.savings.find((e) => e.end > now && e.start.toDateString() === now.toDateString());
+    if (!s) return nothing;
+    const live = s.start <= now;
+    return html`
+      <div class="saving tile ${live ? "live" : ""}">
+        <ha-icon icon=${live ? "mdi:lightning-bolt-circle" : "mdi:leaf"}></ha-icon>
+        <div class="btxt">
+          ${live
+            ? html`<b>Saving session on now</b> until ${fmtTime(s.end)} · keep the big appliances off`
+            : html`<b>Saving session today</b> ${fmtTime(s.start)}–${fmtTime(s.end)} · run the dishwasher or dryer before or after`}
+        </div>
       </div>
     `;
   }
@@ -751,6 +775,26 @@ export class PageHome extends PageBase {
         height: 100%;
         background: linear-gradient(90deg, var(--cy), var(--pk));
         transition: width 0.6s;
+      }
+      /* energy saving session */
+      .saving {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: var(--gap);
+        border: 2px solid var(--cy);
+      }
+      .saving ha-icon {
+        --mdc-icon-size: 30px;
+        color: var(--cy);
+      }
+      .saving.live {
+        animation: savepulse 2s ease-in-out infinite;
+      }
+      @keyframes savepulse {
+        50% {
+          box-shadow: 0 0 0 3px var(--cy), 0 0 22px var(--cy);
+        }
       }
       /* bins */
       .bins {
