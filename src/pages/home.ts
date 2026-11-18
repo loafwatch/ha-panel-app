@@ -4,7 +4,7 @@ import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
 import { activeRoom, roomState } from "./music-state";
 import { binsInfo } from "./bins";
-import { timersOf } from "./timers-state";
+import { timersOf, cancelTimer } from "./timers-state";
 import "../components/weather-fx";
 import { calColor } from "./calendar";
 import { WEATHER_ICON, call, dayLabel, fmtCountdown, fmtDay, fmtTime, isOn, longPress, weatherLabel } from "../util";
@@ -116,7 +116,7 @@ export class PageHome extends PageBase {
             ${t.add_minute_script
               ? html`<button class="btn sm" @click=${() => call(this.hass, "script", "turn_on", { entity_id: t.add_minute_script, variables: { timer_id: x.id, minutes: 1 } })}>+1</button>`
               : nothing}
-            <button class="btn sm icon" aria-label="Cancel" @click=${() => call(this.hass, "view_assist", "cancel_timer", { timer_id: x.id })}>
+            <button class="btn sm icon" aria-label="Cancel" @click=${() => cancelTimer(this.hass, this.config, x.id, x.name)}>
               <ha-icon icon="mdi:close"></ha-icon>
             </button>
           </div>`

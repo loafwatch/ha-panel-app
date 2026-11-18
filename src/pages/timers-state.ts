@@ -1,4 +1,4 @@
-import type { HomeAssistant } from "../types";
+import type { HomeAssistant, PanelConfig } from "../types";
 
 export interface Timer {
   id: string;
@@ -34,4 +34,19 @@ export function timerLabel(name: string) {
   const u = m[2].toLowerCase();
   const unit = u.startsWith("h") ? "hour" : u.startsWith("s") ? "second" : "minute";
   return `${q} ${unit} timer`;
+}
+
+/** Cancel a timer from the panel and say so out loud on the voice satellite, as a voice cancel would. */
+export async function cancelTimer(hass: HomeAssistant, config: PanelConfig, id: string, name: string) {
+  try {
+    await hass.callService("view_assist", "cancel_timer", { timer_id: id });
+  } catch (e) {
+    console.warn("ha-panel-app: cancel_timer failed", e);
+    return;
+  }
+  const sat = config.voice?.satellite;
+  if (sat)
+    hass
+      .callService("assist_satellite", "announce", { entity_id: sat, message: `${timerLabel(name)} cancelled`, preannounce: false })
+      .catch(() => undefined);
 }

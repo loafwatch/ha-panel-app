@@ -1,7 +1,7 @@
 import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { PageBase } from "./base";
-import { timersOf } from "./timers-state";
+import { timersOf, cancelTimer } from "./timers-state";
 import { call, fmtCountdown, isOn } from "../util";
 
 export class PageTimers extends PageBase {
@@ -54,7 +54,7 @@ export class PageTimers extends PageBase {
                     ${t.add_minute_script
                       ? html`<button class="btn" @click=${() => call(this.hass, "script", "turn_on", { entity_id: t.add_minute_script, variables: { timer_id: x.id, minutes: 1 } })}>+1 min</button>`
                       : nothing}
-                    <button class="btn" @click=${() => call(this.hass, "view_assist", "cancel_timer", { timer_id: x.id })}>Cancel</button>
+                    <button class="btn" @click=${() => cancelTimer(this.hass, this.config, x.id, x.name)}>Cancel</button>
                   </div>
                 </div>`;
               })
