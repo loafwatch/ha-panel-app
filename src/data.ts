@@ -135,7 +135,7 @@ export class DataHub extends EventTarget {
           const allDay = !String(e.start).includes("T");
           const start = allDay ? new Date(e.start + "T00:00:00") : new Date(e.start);
           const end = allDay ? new Date(e.end + "T00:00:00") : new Date(e.end);
-          out.push({ summary: e.summary ?? "", start, end, allDay, location: e.location, calendar: cal });
+          out.push({ summary: tidyTitle(e.summary ?? ""), start, end, allDay, location: e.location, calendar: cal });
         }
       }
       return out.sort((a, b) => a.start.getTime() - b.start.getTime() || Number(b.allDay) - Number(a.allDay));
@@ -174,4 +174,9 @@ export class DataHub extends EventTarget {
       return undefined;
     }
   }
+}
+
+/** Tidy hand-typed titles: "Party- Sam" or "Party -Sam" becomes "Party - Sam". Hyphenated words are left alone. */
+export function tidyTitle(t: string) {
+  return t.replace(/(\S) ?- (?=\S)/g, "$1 - ").replace(/(\S) -(?=\S)/g, "$1 - ").trim();
 }
