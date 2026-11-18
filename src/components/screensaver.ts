@@ -5,6 +5,7 @@ import { tokens } from "../styles";
 import type { DataHub } from "../data";
 import type { HomeAssistant, PanelConfig } from "../types";
 import { binsInfo } from "../pages/bins";
+import { timerLabel, timersOf } from "../pages/timers-state";
 import { WEATHER_ICON, dayLabel, fmtDay, fmtTime, weatherLabel } from "../util";
 
 /**
@@ -43,7 +44,7 @@ export class PanelScreensaver extends LitElement {
       window.clearInterval(this.timer);
       if (this.open) {
         this.now = new Date();
-        this.timer = window.setInterval(() => (this.now = new Date()), 15000);
+        this.timer = window.setInterval(() => (this.now = new Date()), 1000);
       }
     }
     if (changed.has("hub")) this.hub?.addEventListener("change", this.onHub);
@@ -52,6 +53,12 @@ export class PanelScreensaver extends LitElement {
   private down = (e: PointerEvent) => {
     this.sx = e.clientX;
     this.sy = e.clientY;
+  };
+
+  /** Tapping a timer wakes straight onto the Timers page. */
+  private toTimers = (e: PointerEvent) => {
+    e.stopPropagation();
+    this.dispatchEvent(new CustomEvent("panel-wake", { detail: { page: "timers" }, bubbles: true, composed: true }));
   };
 
   /** Tapping "now playing" wakes straight onto the Music page. */
@@ -90,6 +97,7 @@ export class PanelScreensaver extends LitElement {
     const ms = mc ? this.hass.states[mc.sensor] : undefined;
     const ko = ms && !["unknown", "unavailable", ""].includes(ms.state) ? new Date(ms.state) : undefined;
     const matchDay = !!ko && !isNaN(ko.getTime()) && ko.toDateString() === now.toDateString() && now.getTime() < ko.getTime() + 2.5 * 3600000;
+    const tms = c.timers?.sensor ? timersOf(this.hass, c.timers.sensor).filter((t) => t.left > 0) : [];
     const np = c.now_playing ? this.hass.states[c.now_playing] : undefined;
     const playing = np?.state === "playing" && !!np.attributes.media_title;
     const url = c.photos?.url ? c.photos.url + (c.photos.url.includes("?") ? "&" : "?") + "n=" + this.n : "";
@@ -110,6 +118,15 @@ export class PanelScreensaver extends LitElement {
           ${bins?.due
             ? html`<div class="pill bin" style="--bin:${bins.next?.color ?? "#ff2e97"}"><ha-icon icon="mdi:trash-can-outline"></ha-icon>${bins.next?.name ?? "Bin"} out tonight</div>`
             : nothing}
+          ${tms.map((t) => {
+            const s = Math.max(0, Math.round(t.left));
+            const mm = Math.floor(s / 60);
+            const left = s >= 3600 ? `${Math.floor(s / 3600)}:${String(mm % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}` : `${mm}:${String(s % 60).padStart(2, "0")}`;
+            const pct = t.total > 0 ? Math.min(100, Math.max(0, (1 - t.left / t.total) * 100)) : 0;
+            return html`<div class="pill tm ${s <= 60 ? "soon" : ""}" style="--p:${pct}%" @pointerup=${this.toTimers}>
+              <ha-icon icon="mdi:timer-outline"></ha-icon><span>${timerLabel(t.name)}</span><b>${left}</b>
+            </div>`;
+          })}
           ${playing
             ? html`<div class="pill np" @pointerup=${this.toMusic}>
                 ${np!.attributes.entity_picture
@@ -256,6 +273,36 @@ export class PanelScreensaver extends LitElement {
       .pill.bin {
         border: 2px solid var(--bin);
         animation: binpulse 2s ease-in-out infinite;
+      }
+      .pill.tm {
+        pointer-events: auto;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        border: 2px solid #ff2e97;
+        gap: 10px;
+      }
+      .pill.tm::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: var(--p);
+        background: rgba(255, 46, 151, 0.28);
+        transition: width 1s linear;
+      }
+      .pill.tm > * {
+        position: relative;
+      }
+      .pill.tm b {
+        font-size: 22px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        min-width: 3.2ch;
+        text-align: right;
+      }
+      .pill.tm.soon {
+        animation: binpulse 1s ease-in-out infinite;
+        --bin: #ff2e97;
       }
       .pill.np {
         pointer-events: auto;

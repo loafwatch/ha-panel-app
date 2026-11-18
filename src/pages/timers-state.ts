@@ -24,3 +24,14 @@ export function timersOf(hass: HomeAssistant, sensor: string): Timer[] {
     .filter((t) => t.left > -2)
     .sort((a, b) => a.left - b.left);
 }
+
+/** "15min", "15 mins", "a minute" → "15 minute timer"; anything else → "<name> timer". */
+export function timerLabel(name: string) {
+  const n = name.replace(/ timer$/i, "").trim();
+  const m = n.match(/^(\d+|an?|one)\s*(s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?)$/i);
+  if (!m) return `${n.charAt(0).toUpperCase()}${n.slice(1)} timer`;
+  const q = /^(an?|one)$/i.test(m[1]) ? "1" : m[1];
+  const u = m[2].toLowerCase();
+  const unit = u.startsWith("h") ? "hour" : u.startsWith("s") ? "second" : "minute";
+  return `${q} ${unit} timer`;
+}
