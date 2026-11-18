@@ -54,6 +54,12 @@ export class PanelScreensaver extends LitElement {
     this.sy = e.clientY;
   };
 
+  /** Tapping "now playing" wakes straight onto the Music page. */
+  private toMusic = (e: PointerEvent) => {
+    e.stopPropagation();
+    this.dispatchEvent(new CustomEvent("panel-wake", { detail: { page: "music" }, bubbles: true, composed: true }));
+  };
+
   private up = (e: PointerEvent) => {
     const dx = e.clientX - this.sx;
     const dy = e.clientY - this.sy;
@@ -105,7 +111,7 @@ export class PanelScreensaver extends LitElement {
             ? html`<div class="pill bin" style="--bin:${bins.next?.color ?? "#ff2e97"}"><ha-icon icon="mdi:trash-can-outline"></ha-icon>${bins.next?.name ?? "Bin"} out tonight</div>`
             : nothing}
           ${playing
-            ? html`<div class="pill np">
+            ? html`<div class="pill np" @pointerup=${this.toMusic}>
                 ${np!.attributes.entity_picture
                   ? html`<img src=${np!.attributes.entity_picture} alt="" />`
                   : html`<ha-icon icon="mdi:music"></ha-icon>`}
@@ -252,6 +258,8 @@ export class PanelScreensaver extends LitElement {
         animation: binpulse 2s ease-in-out infinite;
       }
       .pill.np {
+        pointer-events: auto;
+        cursor: pointer;
         padding: 6px 16px 6px 6px;
         max-width: 420px;
       }

@@ -173,6 +173,11 @@ export class HaPanelApp extends LitElement {
     window.setTimeout(() => {
       if (page === "next" || page === "prev") {
         if (this.saver || Date.now() < this.holdSwipeUntil) return;
+        // swiping back past the first page returns to the photo screensaver
+        if (page === "prev" && this.index === 0) {
+          this.saver = true;
+          return;
+        }
         const to = Math.max(0, Math.min(this.pages.length - 1, this.index + (page === "next" ? 1 : -1)));
         this.goTo(this.pages[to].id);
       } else this.goTo(page);
@@ -200,9 +205,17 @@ export class HaPanelApp extends LitElement {
     this.saver = true;
   }
 
-  private wake = () => {
+  private wake = (e?: Event) => {
+    // the tap that wakes the panel must not also land on whatever is underneath it
+    const swallow = (ev: Event) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    window.addEventListener("click", swallow, true);
+    window.setTimeout(() => window.removeEventListener("click", swallow, true), 450);
     this.saver = false;
-    this.goTo(this.config.home_page ?? "home", false);
+    const page = (e as CustomEvent<{ page?: string }> | undefined)?.detail?.page;
+    this.goTo(page ?? this.config.home_page ?? "home", false);
     this.resetIdle();
   };
 
