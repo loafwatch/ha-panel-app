@@ -56,6 +56,8 @@ panel_custom:
         satellite: assist_satellite.example_tablet
         stt: sensor.example_tablet_stt
         tts: sensor.example_tablet_tts
+      recipes:                                # optional Recipes page (Mealie integration)
+        url: http://192.0.2.10:9925           # Mealie address, used for recipe photos
       tv:                                     # optional TV remote page (Android TV Remote integration)
         - name: Living room
           remote: remote.example_tv

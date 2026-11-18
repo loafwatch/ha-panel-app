@@ -120,6 +120,8 @@ export interface PanelConfig {
    */
   match?: { sensor: string; label?: string; color?: string; icon?: string };
   media?: { url: string; title?: string };
+  /** Recipes page backed by the Mealie integration. `url` is Mealie's address (for photos). */
+  recipes?: { url?: string; config_entry?: string };
   /** TV remotes (Android TV Remote integration). */
   tv?: TvConfig[];
   transit?: TransitConfig;
@@ -163,7 +165,7 @@ export interface PanelInfo {
   config: PanelConfig;
 }
 
-export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv";
+export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv" | "recipes";
 
 export interface TvConfig {
   name?: string;
