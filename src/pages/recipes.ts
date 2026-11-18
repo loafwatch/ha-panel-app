@@ -36,6 +36,14 @@ export class PageRecipes extends PageBase {
   @state() private opening = "";
   @state() private ticked = new Set<number>();
   @state() private step = 0;
+  /** Method view: one step at a time, or every step in one scrolling list (remembered on this device). */
+  @state() private allSteps = (() => {
+    try {
+      return localStorage.getItem("hpa-recipe-all-steps") === "1";
+    } catch {
+      return false;
+    }
+  })();
   private loadedAt = 0;
   private entry?: string;
 
@@ -169,6 +177,24 @@ export class PageRecipes extends PageBase {
     this.toast(`Timer set for ${mins} minute${mins === 1 ? "" : "s"}`);
   }
 
+  private setAllSteps(v: boolean) {
+    this.allSteps = v;
+    try {
+      localStorage.setItem("hpa-recipe-all-steps", v ? "1" : "0");
+    } catch {
+      /* storage unavailable: keep the choice for this visit only */
+    }
+  }
+
+  private timerBtn(text: string, name: string) {
+    const mins = this.stepMinutes(text);
+    if (!mins || !this.config.timers) return nothing;
+    return html`<button class="btn primary tbtn" @click=${(e: Event) => {
+      e.stopPropagation();
+      this.startTimer(mins, name.split(/\s+/).slice(0, 3).join(" "));
+    }}><ha-icon icon="mdi:timer-outline"></ha-icon>${mins} min timer</button>`;
+  }
+
   private toggleIng(i: number) {
     const s = new Set(this.ticked);
     s.has(i) ? s.delete(i) : s.add(i);
@@ -261,8 +287,29 @@ export class PageRecipes extends PageBase {
             </div>
           </div>
           <div class="tile method">
-            <div class="sec">Method <span>${r.steps.length ? `Step ${this.step + 1} of ${r.steps.length}` : ""}</span></div>
-            ${cur
+            <div class="mhead">
+              <div class="sec">Method${!this.allSteps && r.steps.length ? html` <span class="cnt">Step ${this.step + 1} of ${r.steps.length}</span>` : nothing}</div>
+              ${r.steps.length > 1
+                ? html`<div class="seg mini">
+                    <button class=${this.allSteps ? "" : "on"} @click=${() => this.setAllSteps(false)}>Step by step</button>
+                    <button class=${this.allSteps ? "on" : ""} @click=${() => this.setAllSteps(true)}>All steps</button>
+                  </div>`
+                : nothing}
+            </div>
+            ${this.allSteps && r.steps.length
+              ? html`<div class="scroll all">
+                  ${r.steps.map(
+                    (st, i) => html`<div class="srow ${i === this.step ? "on" : ""}" @click=${() => (this.step = i)}>
+                      <div class="num">${i + 1}</div>
+                      <div class="sbody">
+                        ${st.title ? html`<div class="sub">${st.title}</div>` : nothing}
+                        <div class="stxt small">${st.text}</div>
+                        ${this.timerBtn(st.text, r.name)}
+                      </div>
+                    </div>`,
+                  )}
+                </div>`
+              : cur
               ? html`<div class="now">
                     ${cur.title ? html`<div class="sub">${cur.title}</div>` : nothing}
                     <div class="stxt">${cur.text}</div>
@@ -497,6 +544,84 @@ export class PageRecipes extends PageBase {
         display: flex;
         flex-direction: column;
         min-height: 0;
+      }
+      .mhead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .mhead .sec {
+        margin: 0;
+      }
+      .cnt {
+        margin-left: 8px;
+        color: var(--text-2);
+        font-weight: 500;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .seg.mini {
+        display: inline-flex;
+        padding: 3px;
+        border-radius: 999px;
+        background: var(--tile-2);
+      }
+      .seg.mini button {
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-2);
+      }
+      .seg.mini button.on {
+        background: var(--grad);
+        color: #fff;
+      }
+      .scroll.all {
+        padding-right: 4px;
+      }
+      .srow {
+        display: flex;
+        gap: 14px;
+        padding: 14px 10px;
+        border-radius: 14px;
+        border-bottom: 1px solid rgba(127, 127, 127, 0.12);
+        cursor: pointer;
+      }
+      .srow.on {
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .num {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: var(--tile-2);
+        font-weight: 700;
+      }
+      .srow.on .num {
+        background: var(--grad);
+        color: #fff;
+      }
+      .sbody {
+        flex: 1;
+        min-width: 0;
+      }
+      .stxt.small {
+        font-size: 19px;
+        line-height: 1.5;
+      }
+      .tbtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+        padding: 10px 16px;
       }
       .sec span {
         float: right;
