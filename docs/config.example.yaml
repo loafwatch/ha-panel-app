@@ -65,6 +65,7 @@ panel_custom:
           apps:
             - { name: YouTube, package: com.google.android.youtube.tv, icon: mdi:youtube, color: "#ff0033" }
             - { name: Spotify, activity: "spotify://", icon: mdi:spotify, color: "#1ed760" }
+      now_playing: media_player.example_speaker   # optional: track on the screensaver while it plays
       match:                                  # optional match-day pill on the screensaver
         sensor: sensor.next_home_match        # timestamp of kick-off; attributes: opponent
         label: Home                           # e.g. your team name

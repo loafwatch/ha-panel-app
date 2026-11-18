@@ -84,6 +84,8 @@ export class PanelScreensaver extends LitElement {
     const ms = mc ? this.hass.states[mc.sensor] : undefined;
     const ko = ms && !["unknown", "unavailable", ""].includes(ms.state) ? new Date(ms.state) : undefined;
     const matchDay = !!ko && !isNaN(ko.getTime()) && ko.toDateString() === now.toDateString() && now.getTime() < ko.getTime() + 2.5 * 3600000;
+    const np = c.now_playing ? this.hass.states[c.now_playing] : undefined;
+    const playing = np?.state === "playing" && !!np.attributes.media_title;
     const url = c.photos?.url ? c.photos.url + (c.photos.url.includes("?") ? "&" : "?") + "n=" + this.n : "";
     return html`
       <div class="ss">
@@ -101,6 +103,17 @@ export class PanelScreensaver extends LitElement {
         <div class="side">
           ${bins?.due
             ? html`<div class="pill bin" style="--bin:${bins.next?.color ?? "#ff2e97"}"><ha-icon icon="mdi:trash-can-outline"></ha-icon>${bins.next?.name ?? "Bin"} out tonight</div>`
+            : nothing}
+          ${playing
+            ? html`<div class="pill np">
+                ${np!.attributes.entity_picture
+                  ? html`<img src=${np!.attributes.entity_picture} alt="" />`
+                  : html`<ha-icon icon="mdi:music"></ha-icon>`}
+                <span class="npt"><b>${np!.attributes.media_title}</b>${np!.attributes.media_artist
+                  ? html`<span>${np!.attributes.media_artist}</span>`
+                  : nothing}</span>
+                <span class="eq"><i></i><i></i><i></i></span>
+              </div>`
             : nothing}
           ${matchDay && ko && mc
             ? html`<div class="pill match ${now >= ko ? "live" : ""}" style="--mc:${mc.color ?? "#2f6bff"}">
@@ -237,6 +250,67 @@ export class PanelScreensaver extends LitElement {
       .pill.bin {
         border: 2px solid var(--bin);
         animation: binpulse 2s ease-in-out infinite;
+      }
+      .pill.np {
+        padding: 6px 16px 6px 6px;
+        max-width: 420px;
+      }
+      .pill.np img {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex: none;
+        animation: spin 12s linear infinite;
+      }
+      .npt {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .npt b,
+      .npt span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .npt span {
+        font-size: 14px;
+        opacity: 0.75;
+      }
+      .eq {
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        height: 18px;
+        flex: none;
+      }
+      .eq i {
+        width: 3px;
+        background: #ff2e97;
+        border-radius: 2px;
+        animation: eq 0.9s ease-in-out infinite;
+      }
+      .eq i:nth-child(2) {
+        background: #00c8d4;
+        animation-delay: -0.3s;
+      }
+      .eq i:nth-child(3) {
+        animation-delay: -0.6s;
+      }
+      @keyframes eq {
+        0%,
+        100% {
+          height: 4px;
+        }
+        50% {
+          height: 18px;
+        }
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
       .pill.match {
         border: 2px solid var(--mc);

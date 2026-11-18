@@ -112,6 +112,8 @@ export interface PanelConfig {
   };
 
   photos?: { url: string };
+  /** Media player whose track is shown on the screensaver while it plays. */
+  now_playing?: string;
   /**
    * Match-day pill on the screensaver: a timestamp sensor holding the next home kick-off
    * (attributes: opponent, competition). Shown only on the day of the match.
