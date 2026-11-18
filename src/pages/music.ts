@@ -303,7 +303,7 @@ export class PageMusic extends PageBase {
     const now = r ? this.st(r.player) : undefined;
     const playingUri = String(now?.attributes.media_content_id ?? "");
     return html`<div class="sec">Radio</div>
-      <div class="radio">
+      <div class="radio" style="--n:${st.length}">
         ${st.map((s) => {
           const on = !!playingUri && (playingUri === s.uri || playingUri.endsWith(s.uri.split("/").pop() ?? "\u0000"));
           return html`<button class="station ${on ? "on" : ""}" @click=${() => this.playRadio(s.uri, s.name)} aria-label=${s.name}>
@@ -828,8 +828,9 @@ export class PageMusic extends PageBase {
       }
       .radio {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
-        gap: 8px;
+        /* one column per station, so the logos stretch across the full width */
+        grid-template-columns: repeat(var(--n, 7), minmax(0, 1fr));
+        gap: 10px;
       }
       .station {
         display: flex;
@@ -861,7 +862,7 @@ export class PageMusic extends PageBase {
         box-shadow: 0 0 0 3px var(--accent), 0 0 14px var(--accent-soft);
       }
       .station .sn {
-        font-size: 11px;
+        font-size: 12px;
         color: var(--text-2);
         text-align: center;
         line-height: 1.2;
