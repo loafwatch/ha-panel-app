@@ -294,8 +294,8 @@ export class HaPanelApp extends LitElement {
         transform: translateX(-50%);
         z-index: 10;
         display: flex;
-        gap: 4px;
-        padding: 6px;
+        gap: 6px;
+        padding: 7px;
         border-radius: 999px;
         background: var(--dock);
         backdrop-filter: blur(14px);
@@ -308,13 +308,14 @@ export class HaPanelApp extends LitElement {
       .dk {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 10px 14px;
+        gap: 8px;
+        padding: 12px 18px;
         border-radius: 999px;
         border: none;
         background: none;
         color: var(--text-2);
-        font: 600 14px var(--font);
+        font: 600 16px var(--font);
+        --mdc-icon-size: 30px;
         cursor: pointer;
         white-space: nowrap;
         transition: background 0.25s, color 0.25s;
@@ -333,7 +334,7 @@ export class HaPanelApp extends LitElement {
       .toast {
         position: absolute;
         left: 50%;
-        bottom: 88px;
+        bottom: 100px;
         transform: translate(-50%, 12px);
         opacity: 0;
         z-index: 30;

@@ -388,7 +388,7 @@ export class PageMusic extends PageBase {
         height: 100%;
         overflow-y: auto;
         scrollbar-width: none;
-        padding: 18px 28px 110px 12px;
+        padding: 18px 28px 124px 12px;
         overscroll-behavior: contain;
       }
       .left::-webkit-scrollbar,
@@ -407,7 +407,7 @@ export class PageMusic extends PageBase {
           padding-bottom: 20px;
         }
         .right {
-          padding: 0 24px 110px;
+          padding: 0 24px 124px;
         }
       }
       .rooms {
