@@ -122,6 +122,8 @@ export interface PanelConfig {
   media?: { url: string; title?: string };
   /** Recipes page backed by the Mealie integration. `url` is Mealie's address (for photos). */
   recipes?: { url?: string; config_entry?: string };
+  /** Live TV page: an M3U playlist (e.g. a free-to-air list from iptv-org). */
+  iptv?: { playlist: string };
   /** TV remotes (Android TV Remote integration). */
   tv?: TvConfig[];
   transit?: TransitConfig;
@@ -165,7 +167,7 @@ export interface PanelInfo {
   config: PanelConfig;
 }
 
-export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv" | "recipes";
+export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv" | "recipes" | "iptv";
 
 export interface TvConfig {
   name?: string;

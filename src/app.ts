@@ -16,6 +16,7 @@ import "./pages/media";
 import "./pages/transit";
 import "./pages/tv";
 import "./pages/recipes";
+import "./pages/iptv";
 import "./components/voice";
 import "./components/screensaver";
 
@@ -34,6 +35,7 @@ const PAGES: PageDef[] = [
   { id: "home", label: "Home", icon: "mdi:home-variant", tag: "panel-home", needs: () => true },
   { id: "music", label: "Music", icon: "mdi:music", tag: "panel-music", needs: (c) => !!c.music?.rooms?.length },
   { id: "tv", label: "TV", icon: "mdi:remote-tv", tag: "panel-tv", needs: (c) => !!c.tv?.length },
+  { id: "iptv", label: "Live TV", icon: "mdi:television-play", tag: "panel-iptv", needs: (c) => !!c.iptv?.playlist },
   { id: "recipes", label: "Recipes", icon: "mdi:chef-hat", tag: "panel-recipes", needs: (c) => !!c.recipes },
   { id: "calendar", label: "Calendar", icon: "mdi:calendar-month", tag: "panel-calendar", needs: (c) => !!c.calendars?.length },
   { id: "weather", label: "Weather", icon: "mdi:weather-partly-cloudy", tag: "panel-weather", needs: (c) => !!c.weather },
