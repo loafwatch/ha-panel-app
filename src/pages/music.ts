@@ -26,6 +26,11 @@ const GRACE_MS = 6000;
 export class PageMusic extends PageBase {
   @state() private localRoom = 0;
   @state() private playlists: Pl[] = [];
+  @state() private q = "";
+  @state() private found?: { tracks: Track[]; albums: Pl[]; artists: Pl[]; playlists: Pl[] } | null;
+  @state() private searching = false;
+  private qTimer?: number;
+  private qSeq = 0;
   @state() private favourites: Pl[] = [];
   @state() private libState: "idle" | "loading" | "ok" | "error" = "idle";
   @state() private cur?: Track;
@@ -316,8 +321,108 @@ export class PageMusic extends PageBase {
     this.toast(`Playing ${name} in ${r.name}`);
   }
 
-  private lists(live: boolean) {
+  private onQuery(e: InputEvent) {
+    this.q = (e.target as HTMLInputElement).value;
+    window.clearTimeout(this.qTimer);
+    if (this.q.trim().length < 2) {
+      this.found = undefined;
+      this.searching = false;
+      return;
+    }
+    this.searching = true;
+    this.qTimer = window.setTimeout(() => this.search(this.q.trim()), 450);
+  }
+
+  private clearSearch() {
+    window.clearTimeout(this.qTimer);
+    this.q = "";
+    this.found = undefined;
+    this.searching = false;
+  }
+
+  private async search(q: string) {
+    const seq = ++this.qSeq;
+    const ce = await this.hub.musicEntry();
+    if (!ce) return;
+    const r = await this.hub.respond<any>("music_assistant", "search", {
+      config_entry_id: ce,
+      name: q,
+      media_type: ["track", "artist", "album", "playlist"],
+      limit: 8,
+    });
+    if (seq !== this.qSeq) return; // a newer search has started
+    const img = (x: any) => x?.image ?? x?.album?.image ?? undefined;
+    const names = (a: any[] | undefined) => (a ?? []).map((x) => x.name).join(", ");
+    this.found = {
+      tracks: (r?.tracks ?? []).map((t: any) => ({ uri: t.uri, title: t.name, artist: names(t.artists), img: img(t) })),
+      albums: (r?.albums ?? []).map((a: any) => ({ uri: a.uri, name: `${a.name}${a.artists?.length ? " · " + names(a.artists) : ""}`, image: img(a) })),
+      artists: (r?.artists ?? []).map((a: any) => ({ uri: a.uri, name: a.name, image: img(a) })),
+      playlists: (r?.playlists ?? []).map((p: any) => ({ uri: p.uri, name: p.name, image: img(p) })),
+    };
+    this.searching = false;
+  }
+
+  /** Play a single search result now ("play") or after the current track ("next"). */
+  private playTrack(t: Track, how: "play" | "next") {
+    const r = this.room;
+    if (!r || !t.uri) return;
+    call(this.hass, "music_assistant", "play_media", { entity_id: r.player, media_id: t.uri, media_type: "track", enqueue: how });
+    this.toast(how === "play" ? `Playing ${t.title} in ${r.name}` : `${t.title} will play next in ${r.name}`);
+  }
+
+  private searchBox() {
+    return html`<div class="search">
+      <ha-icon icon="mdi:magnify"></ha-icon>
+      <input
+        type="search"
+        placeholder="Search Spotify: songs, artists, albums"
+        .value=${this.q}
+        @input=${this.onQuery}
+        @keydown=${(e: KeyboardEvent) => {
+          if (e.key === "Enter") {
+            window.clearTimeout(this.qTimer);
+            (e.target as HTMLInputElement).blur();
+            if (this.q.trim().length >= 2) this.search(this.q.trim());
+          }
+        }}
+        enterkeyhint="search"
+        autocomplete="off"
+      />
+      ${this.q ? html`<button class="clr" aria-label="Clear search" @click=${this.clearSearch}><ha-icon icon="mdi:close"></ha-icon></button>` : nothing}
+    </div>`;
+  }
+
+  private results() {
+    const f = this.found;
+    if (this.searching && !f) return html`<div class="empty">Searching…</div>`;
+    if (!f) return nothing;
+    if (!f.tracks.length && !f.albums.length && !f.artists.length && !f.playlists.length)
+      return html`<div class="empty">Nothing found for "${this.q}"</div>`;
     return html`
+      ${f.tracks.length
+        ? html`<div class="sec">Songs</div>
+            ${f.tracks.map(
+              (t) => html`<div class="row tap" @click=${() => this.playTrack(t, "play")}>
+                <div class="thumb" style=${t.img ? `background-image:url("${t.img}")` : ""}>${t.img ? nothing : html`<ha-icon icon="mdi:music-note"></ha-icon>`}</div>
+                <div class="rt"><div class="rn">${t.title}</div><div class="ra muted">${t.artist ?? ""}</div></div>
+                <button class="rb" aria-label="Play next" @click=${(e: Event) => {
+                  e.stopPropagation();
+                  this.playTrack(t, "next");
+                }}><ha-icon icon="mdi:playlist-plus"></ha-icon></button>
+                <button class="rb play" aria-label="Play now"><ha-icon icon="mdi:play"></ha-icon></button>
+              </div>`,
+            )}`
+        : nothing}
+      ${f.artists.length ? html`<div class="sec">Artists</div>${f.artists.slice(0, 4).map((p) => this.plRow(p))}` : nothing}
+      ${f.albums.length ? html`<div class="sec">Albums</div>${f.albums.slice(0, 5).map((p) => this.plRow(p))}` : nothing}
+      ${f.playlists.length ? html`<div class="sec">Playlists</div>${f.playlists.slice(0, 5).map((p) => this.plRow(p))}` : nothing}
+    `;
+  }
+
+  private lists(live: boolean) {
+    if (this.q.trim().length >= 2) return html`${this.searchBox()}${this.results()}`;
+    return html`
+      ${this.searchBox()}
       ${this.radioRow()}
       ${live
         ? html`<div class="sec">Up next</div>
@@ -663,6 +768,48 @@ export class PageMusic extends PageBase {
       }
       .vol input {
         flex: 1;
+      }
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 8px 0 16px;
+        height: 52px;
+        margin: 4px 0 6px;
+        border-radius: 999px;
+        background: var(--tile-2);
+        box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 35%, transparent);
+      }
+      .search:focus-within {
+        box-shadow: inset 0 0 0 2px var(--accent), 0 0 16px color-mix(in srgb, var(--accent) 35%, transparent);
+      }
+      .search ha-icon {
+        --mdc-icon-size: 24px;
+        color: var(--text-2);
+        flex: none;
+      }
+      .search input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--text);
+        font: 500 17px var(--font);
+      }
+      .search input::-webkit-search-cancel-button {
+        display: none;
+      }
+      .search .clr {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
       }
       .sec {
         font-size: 12px;
