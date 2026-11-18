@@ -420,9 +420,13 @@ export class PageMusic extends PageBase {
   }
 
   private lists(live: boolean) {
-    if (this.q.trim().length >= 2) return html`${this.searchBox()}${this.results()}`;
+    // The search box stays in one place in the template so typing never re-creates it
+    // (re-creating it drops focus and closes the on-screen keyboard).
+    return html`${this.searchBox()}${this.q.trim().length >= 2 ? this.results() : this.library(live)}`;
+  }
+
+  private library(live: boolean) {
     return html`
-      ${this.searchBox()}
       ${this.radioRow()}
       ${live
         ? html`<div class="sec">Up next</div>
