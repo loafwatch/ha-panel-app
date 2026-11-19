@@ -104,7 +104,7 @@ export class PageIptv extends PageBase {
     v.onplaying = ok;
     v.onerror = fail;
     if (Hls.isSupported() && /\.m3u8(\?|$)/i.test(c.url)) {
-      const hls = new Hls({ lowLatencyMode: false, maxBufferLength: 20 });
+      const hls = new Hls({ lowLatencyMode: false, maxBufferLength: 30, liveSyncDurationCount: 4 });
       this.hls = hls;
       hls.on(Hls.Events.ERROR, (_e, d) => {
         if (d.fatal) fail();
@@ -113,7 +113,14 @@ export class PageIptv extends PageBase {
       hls.attachMedia(v);
     } else if (mpegts.getFeatureList().mseLivePlayback) {
       // raw MPEG-TS streams (e.g. relayed by Threadfin)
-      const p = mpegts.createPlayer({ type: "mpegts", isLive: true, url: c.url }, { enableStashBuffer: false, liveBufferLatencyChasing: true });
+      const p = mpegts.createPlayer({ type: "mpegts", isLive: true, url: c.url }, {
+          // a few seconds of buffer for smooth playback; we stay slightly behind live instead of chasing it
+          enableStashBuffer: true,
+          stashInitialSize: 1024 * 1024,
+          liveBufferLatencyChasing: false,
+          lazyLoad: false,
+          autoCleanupSourceBuffer: true,
+        });
       this.ts = p;
       p.on(mpegts.Events.ERROR, fail);
       p.attachMediaElement(v);
