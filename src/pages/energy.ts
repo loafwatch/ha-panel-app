@@ -5,7 +5,7 @@ import { PageBase } from "./base";
 import { fmtTime } from "../util";
 
 type Range = "day" | "week" | "month" | "year";
-type Kind = "electricity" | "gas";
+type Kind = "electricity" | "gas" | "water";
 interface Bar {
   t: number;
   kwh: number;
@@ -65,6 +65,7 @@ export class PageEnergy extends PageBase {
       for (const s of p.energy_sources ?? []) {
         if (s.type === "grid" && s.stat_energy_from && !src.electricity) src.electricity = { energy: s.stat_energy_from, cost: s.stat_cost ?? undefined };
         if (s.type === "gas" && s.stat_energy_from && !src.gas) src.gas = { energy: s.stat_energy_from, cost: s.stat_cost ?? undefined };
+        if (s.type === "water" && s.stat_energy_from && !src.water) src.water = { energy: s.stat_energy_from, cost: s.stat_cost ?? undefined };
       }
       this.sources = src;
       if (!src[this.kind]) this.kind = src.electricity ? "electricity" : "gas";
@@ -207,22 +208,26 @@ export class PageEnergy extends PageBase {
         <div class="tile chart">
           <div class="chead">
             <div class="seg">
-              ${(["electricity", "gas"] as Kind[])
+              ${(["electricity", "gas", "water"] as Kind[])
                 .filter((k) => this.sources[k])
                 .map(
                   (k) => html`<button
                     class="chip ${this.kind === k ? "on" : ""}"
                     @click=${() => {
                       this.kind = k;
-                      if (k === "gas") this.dev = undefined;
+                      if (k !== "electricity") this.dev = undefined;
+                      // water readings are daily, so there's no hourly "Day" view
+                      if (k === "water" && this.range === "day") this.range = "week";
                     }}
                   >
-                    <ha-icon icon=${k === "gas" ? "mdi:fire" : "mdi:flash"}></ha-icon>${k === "gas" ? "Gas" : "Electricity"}
+                    <ha-icon icon=${KIND_ICON[k]}></ha-icon>${KIND_LABEL[k]}
                   </button>`,
                 )}
             </div>
             <div class="seg">
-              ${RANGES.map((r) => html`<button class="chip ${this.range === r.id ? "on" : ""}" @click=${() => (this.range = r.id)}>${r.label}</button>`)}
+              ${RANGES.filter((r) => !(this.kind === "water" && r.id === "day")).map(
+                (r) => html`<button class="chip ${this.range === r.id ? "on" : ""}" @click=${() => (this.range = r.id)}>${r.label}</button>`,
+              )}
             </div>
           </div>
           ${this.kind === "electricity" && en.devices?.length
@@ -244,7 +249,7 @@ export class PageEnergy extends PageBase {
   }
 
   private chart() {
-    if (!this.sources.electricity && !this.sources.gas)
+    if (!this.sources.electricity && !this.sources.gas && !this.sources.water)
       return html`<div class="empty">Add your meters in Home Assistant's Energy settings to see usage here.</div>`;
     const bars = this.bars;
     if (!bars.length) return html`<div class="empty">Loading…</div>`;
@@ -267,10 +272,10 @@ export class PageEnergy extends PageBase {
       <div class="sum ${sel ? "withbd" : ""}">
         <div class="sumtxt">
         ${sel
-          ? html`<div class="big">${fmtKwh(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}${hiOn && hiOf(sel) != null ? html`<span class="hi">${dev!.name} ${fmtKwh(hiOf(sel)!)}${sel.kwh > 0 ? ` · ${Math.round((hiOf(sel)! / sel.kwh) * 100)}%` : ""}</span>` : nothing}</div>
+          ? html`<div class="big">${this.amt(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}${hiOn && hiOf(sel) != null ? html`<span class="hi">${dev!.name} ${this.amt(hiOf(sel)!)}${sel.kwh > 0 ? ` · ${Math.round((hiOf(sel)! / sel.kwh) * 100)}%` : ""}</span>` : nothing}</div>
               <div class="muted">${this.slotLabel(sel.t, true)}</div>`
-          : html`<div class="big">${fmtKwh(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}${hiOn ? html`<span class="hi">${dev!.name} ${fmtKwh(hiTotal)} · ${share ?? 0}%</span>` : nothing}</div>
-              <div class="muted">${this.rangeLabel()} · average ${fmtKwh(avg)} ${unitWord}</div>`}
+          : html`<div class="big">${this.amt(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}${hiOn ? html`<span class="hi">${dev!.name} ${this.amt(hiTotal)} · ${share ?? 0}%</span>` : nothing}</div>
+              <div class="muted">${this.rangeLabel()} · average ${this.amt(avg)} ${unitWord}</div>`}
         </div>
         ${sel ? this.breakdown(sel) : nothing}
       </div>
@@ -281,7 +286,7 @@ export class PageEnergy extends PageBase {
             class="bar ${b.future ? "future" : ""} ${this.sel === i ? "sel" : ""} ${this.sel != null && this.sel !== i ? "dim" : ""}"
             ?disabled=${b.future}
             @click=${() => (this.sel = this.sel === i ? undefined : i)}
-            aria-label=${this.slotLabel(b.t, true) + " " + fmtKwh(b.kwh)}
+            aria-label=${this.slotLabel(b.t, true) + " " + this.amt(b.kwh)}
           >
             <span class="tot" style="height:${b.future ? 0 : Math.max(b.kwh > 0 ? 2 : 0, (b.kwh / max) * 100)}%"></span>
             <span class="part" style="height:${b.future || !hiOn ? 0 : ((hiOf(b) ?? 0) / max) * 100}%"></span>
@@ -309,6 +314,11 @@ export class PageEnergy extends PageBase {
     return bits.length ? html`<div class="octo">${bits}</div>` : nothing;
   }
 
+  /** kWh for electricity and gas, litres for water. */
+  private amt(v: number) {
+    return this.kind === "water" ? fmtLitres(v) : fmtKwh(v);
+  }
+
   /** Live draw for a chip: "· 70 W", "· 1.8 kW", or nothing when off/unknown. */
   private liveW(power?: string) {
     const w = Number(this.st(power)?.state);
@@ -330,7 +340,7 @@ export class PageEnergy extends PageBase {
           <ha-icon icon=${r.icon ?? "mdi:power-plug-outline"}></ha-icon>
           <span class="bdn">${r.name}</span>
           <span class="bdbar"><i style="width:${pct(r.v)}%"></i></span>
-          <b>${pct(r.v)}%</b><span class="muted">${fmtKwh(r.v)}</span>
+          <b>${pct(r.v)}%</b><span class="muted">${this.amt(r.v)}</span>
         </button>`,
       )}
       ${rows.length
@@ -338,7 +348,7 @@ export class PageEnergy extends PageBase {
             <ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon>
             <span class="bdn">Everything else</span>
             <span class="bdbar"><i style="width:${pct(other)}%"></i></span>
-            <b>${pct(other)}%</b><span class="muted">${fmtKwh(other)}</span>
+            <b>${pct(other)}%</b><span class="muted">${this.amt(other)}</span>
           </div>`
         : html`<div class="muted">No appliance readings for this period yet</div>`}
     </div>`;
@@ -565,6 +575,10 @@ export class PageEnergy extends PageBase {
         height: 230px;
         border-bottom: 1px solid rgba(127, 127, 127, 0.25);
       }
+      .bars.water {
+        --c1: #3ba7ff;
+        --c2: #1c4fd8;
+      }
       .bars.gas {
         --c1: #00c8d4;
         --c2: #2a6bd1;
@@ -714,5 +728,12 @@ export class PageEnergy extends PageBase {
 function fmtKwh(k: number) {
   return `${k >= 100 ? Math.round(k) : k.toFixed(k >= 10 ? 1 : 2)} kWh`;
 }
+
+function fmtLitres(l: number) {
+  return l >= 10000 ? `${(l / 1000).toFixed(l >= 100000 ? 0 : 1)} m³` : `${Math.round(l).toLocaleString("en-GB")} L`;
+}
+
+const KIND_ICON: Record<Kind, string> = { electricity: "mdi:flash", gas: "mdi:fire", water: "mdi:water" };
+const KIND_LABEL: Record<Kind, string> = { electricity: "Electricity", gas: "Gas", water: "Water" };
 
 reg("panel-energy", PageEnergy);
