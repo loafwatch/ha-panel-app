@@ -90,7 +90,9 @@ export class PageTv extends PageBase {
         ${tvs.length > 1
           ? html`<div class="seg top">
               ${tvs.map(
-                (x, i) => html`<button class=${i === this.sel ? "on" : ""} @click=${() => (this.sel = i)}>${x.name ?? "TV " + (i + 1)}</button>`,
+                (x, i) => html`<button class=${i === this.sel ? "on" : ""} @click=${() => (this.sel = i)}>
+                  <ha-icon icon=${/bed/i.test(x.name ?? "") ? "mdi:bed-outline" : "mdi:sofa-outline"}></ha-icon>${x.name ?? "TV " + (i + 1)}
+                </button>`,
               )}
             </div>`
           : nothing}
@@ -153,7 +155,31 @@ export class PageTv extends PageBase {
       }
       .seg.top {
         align-self: flex-start;
+        display: inline-flex;
+        gap: 6px;
+        padding: 5px;
         margin-bottom: var(--gap);
+        border-radius: 999px;
+        background: var(--tile);
+        box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.18);
+      }
+      .seg.top button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 22px;
+        border-radius: 999px;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-2);
+        background: transparent;
+        transition: background 0.15s, color 0.15s;
+        --mdc-icon-size: 20px;
+      }
+      .seg.top button.on {
+        background: var(--grad);
+        color: #fff;
+        box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 40%, transparent);
       }
       .grid {
         flex: 1;
