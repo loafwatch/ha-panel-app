@@ -1,6 +1,6 @@
 {
   "name": "ha-panel-app",
-  "version": "0.3.50",
+  "version": "0.3.51",
   "description": "A tablet-friendly panel app for Home Assistant",
   "scripts": {
     "build": "tsc --noEmit && vite build",
@@ -23,7 +23,8 @@
   },
   "dependencies": {
     "hls.js": "^1.7.4",
-    "lit": "^3.3.3"
+    "lit": "^3.3.3",
+    "mpegts.js": "^1.8.2"
   },
   "type": "module",
   "private": true

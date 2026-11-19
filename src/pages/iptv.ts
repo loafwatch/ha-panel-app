@@ -2,6 +2,7 @@ import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import Hls from "hls.js/dist/hls.light.mjs";
+import mpegts from "mpegts.js";
 import { PageBase } from "./base";
 
 interface Channel {
@@ -33,6 +34,7 @@ export class PageIptv extends PageBase {
     }
   })();
   private hls?: Hls;
+  private ts?: any;
   private loadedAt = 0;
 
   protected watched() {
@@ -95,6 +97,8 @@ export class PageIptv extends PageBase {
     if (!v) return;
     this.hls?.destroy();
     this.hls = undefined;
+    this.ts?.destroy();
+    this.ts = undefined;
     const ok = () => (this.status = "");
     const fail = () => (this.status = "This channel isn't available right now. It may be offline or only work in some countries.");
     v.onplaying = ok;
@@ -107,6 +111,13 @@ export class PageIptv extends PageBase {
       });
       hls.loadSource(c.url);
       hls.attachMedia(v);
+    } else if (mpegts.getFeatureList().mseLivePlayback) {
+      // raw MPEG-TS streams (e.g. relayed by Threadfin)
+      const p = mpegts.createPlayer({ type: "mpegts", isLive: true, url: c.url }, { enableStashBuffer: false, liveBufferLatencyChasing: true });
+      this.ts = p;
+      p.on(mpegts.Events.ERROR, fail);
+      p.attachMediaElement(v);
+      p.load();
     } else {
       v.src = c.url;
     }
@@ -123,6 +134,8 @@ export class PageIptv extends PageBase {
   private stop() {
     this.hls?.destroy();
     this.hls = undefined;
+    this.ts?.destroy();
+    this.ts = undefined;
     const v = this.renderRoot?.querySelector("video") as HTMLVideoElement | null;
     if (v) {
       v.pause();
