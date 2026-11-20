@@ -26,6 +26,7 @@ const GRACE_MS = 6000;
 export class PageMusic extends PageBase {
   @state() private localRoom = 0;
   @state() private playlists: Pl[] = [];
+  @state() private recent: Pl[] = [];
   @state() private q = "";
   @state() private found?: { tracks: Track[]; albums: Pl[]; artists: Pl[]; playlists: Pl[] } | null;
   @state() private searching = false;
@@ -80,6 +81,7 @@ export class PageMusic extends PageBase {
   protected updated(changed: PropertyValues) {
     super.updated(changed);
     if (this.active && (this.libState === "idle" || Date.now() - this.libLoaded > 15 * 60 * 1000)) this.loadLibrary();
+    else if (this.active && this.libState === "ok" && Date.now() - this.recentLoaded > 60 * 1000) this.loadRecent();
     this.trackChange();
   }
 
@@ -165,8 +167,29 @@ export class PageMusic extends PageBase {
       this.favourites = [...liked, ...favs.filter((p) => !/^Liked Songs/i.test(p.name))];
       this.playlists = all.filter((p) => !/^Liked Songs/i.test(p.name));
       this.libState = "ok";
+      this.loadRecent();
     } catch {
       this.libState = "error";
+    }
+  }
+
+  private recentLoaded = 0;
+
+  /** Playlists most recently played (Music Assistant tracks plays from voice, the panel and its own app). */
+  private async loadRecent() {
+    this.recentLoaded = Date.now();
+    const ce = await this.hub.musicEntry();
+    if (!ce) return;
+    try {
+      const r = await this.hub.respond<{ items: any[] }>("music_assistant", "get_library", {
+        config_entry_id: ce,
+        media_type: "playlist",
+        limit: 5,
+        order_by: "last_played_desc",
+      });
+      this.recent = (r?.items ?? []).filter((p) => !JUNK.test(p.name)).map((p) => ({ uri: p.uri, name: p.name, image: p.image }));
+    } catch {
+      this.recent = [];
     }
   }
 
@@ -443,6 +466,7 @@ export class PageMusic extends PageBase {
         : this.libState !== "ok"
           ? html`<div class="empty">Loading your music…</div>`
           : html`
+              ${this.recent.length ? html`<div class="sec">Recently played</div>${this.recent.map((p) => this.plRow(p))}` : nothing}
               <div class="sec">Favourites</div>
               ${this.favourites.map((p) => this.plRow(p))}
               ${this.favourites.length < 2 ? html`<div class="empty">Tip: heart a playlist in Music Assistant to pin it here.</div>` : nothing}
