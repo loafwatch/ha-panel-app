@@ -213,6 +213,9 @@ export class PageTransit extends PageBase {
               ${updated ? html` · board ${hm(updated)}` : nothing}
             </div>
           </div>
+          ${atPlatform && first
+            ? html`<div class="waitpill"><span class="dot"></span>Tram at ${home} now · leaves ${hm(first.at)} (in ${minsWord(first.at)})</div>`
+            : nothing}
           <div class="mapwrap">${this.strip(t, vehicles, home, atPlatform ? first : undefined)}</div>
           <div class="legend muted">
             <span><i class="veh ab"></i>towards ${t.b.name}</span>
@@ -242,17 +245,6 @@ export class PageTransit extends PageBase {
           <text x="${x(i)}" y="${y - 22}" transform="rotate(-55 ${x(i)} ${y - 22})" text-anchor="start">${s.short ?? s.name}</text>
         </g>`;
       })}
-      ${(() => {
-        if (!waiting) return nothing;
-        const hi = Math.max(0, stops.findIndex((s) => s.name === home));
-        const hx = x(hi);
-        return svg`<g class="veh wait" transform="translate(${hx} ${y + 34})">
-          <title>At the platform, leaves ${hm(waiting.at)}</title>
-          <rect x="-24" y="-13" width="48" height="26" rx="8" />
-          <text class="wt" x="0" y="5" text-anchor="middle">${hm(waiting.at)}</text>
-        </g>
-        <text class="wlabel" x="${hx + 32}" y="${y + 40}">At the platform · leaves in ${minsWord(waiting.at)}</text>`;
-      })()}
       ${vehicles.filter((v) => !(waiting && v.dir === "ab" && v.frac <= 0.001)).map((v) => {
         const vx = 30 + v.frac * (W - 130);
         const vy = v.dir === "ab" ? y + 34 : y + 70;
@@ -262,6 +254,16 @@ export class PageTransit extends PageBase {
           <path d="${v.dir === "ab" ? "M-6,-5 L4,0 L-6,5 Z" : "M6,-5 L-4,0 L6,5 Z"}" class="arrow" />
         </g>`;
       })}
+      ${(() => {
+        if (!waiting) return nothing;
+        const hi = Math.max(0, stops.findIndex((s) => s.name === home));
+        const hx = x(hi);
+        return svg`<g class="veh wait" transform="translate(${hx} ${y + 34})">
+          <title>At the platform, leaves ${hm(waiting.at)}</title>
+          <rect x="-26" y="-13" width="52" height="26" rx="8" />
+          <text class="wt" x="0" y="5" text-anchor="middle">${hm(waiting.at)}</text>
+        </g>`;
+      })()}
     </svg>`;
   }
 
@@ -403,8 +405,8 @@ export class PageTransit extends PageBase {
         stroke: var(--line);
         stroke-width: 4;
       }
-      .stop .halo {
-        fill: none;
+      .stop.home circle.halo {
+        fill: rgba(61, 220, 132, 0.18);
         stroke: #3ddc84;
         stroke-width: 4;
         animation: halo 1.6s ease-in-out infinite;
@@ -427,10 +429,25 @@ export class PageTransit extends PageBase {
         font-weight: 700;
         fill: #062b16;
       }
-      .wlabel {
-        font-size: 15px;
-        font-weight: 600;
-        fill: #3ddc84;
+      .waitpill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin: 6px 0 2px;
+        padding: 8px 16px;
+        border-radius: 999px;
+        border: 2px solid #3ddc84;
+        background: rgba(61, 220, 132, 0.12);
+        color: #3ddc84;
+        font-weight: 700;
+        font-size: 16px;
+      }
+      .waitpill .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #3ddc84;
+        animation: halo 1.6s ease-in-out infinite;
       }
       .legend i.veh.wait {
         background: #3ddc84;
