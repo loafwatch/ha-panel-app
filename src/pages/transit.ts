@@ -161,6 +161,10 @@ export class PageTransit extends PageBase {
     const catchable = walk ? nextA.find((d) => d.at.getTime() - now >= walk * 60_000) : undefined;
     const first = nextA[0];
     const firstArr = first ? dwell(first) : undefined;
+    // is the next tram already sitting at the platform?
+    const fa = first ? formsFrom(first) : undefined;
+    const atPlatform =
+      !!first && first.at.getTime() > now && (fa ? fa.arr.getTime() <= now : !!(ap && depsA.length && apDeps.length));
     return html`
       <div class="page" style="--line:${t.color ?? "var(--accent)"}">
         <div class="top">
@@ -209,17 +213,18 @@ export class PageTransit extends PageBase {
               ${updated ? html` · board ${hm(updated)}` : nothing}
             </div>
           </div>
-          <div class="mapwrap">${this.strip(t, vehicles, home)}</div>
+          <div class="mapwrap">${this.strip(t, vehicles, home, atPlatform ? first : undefined)}</div>
           <div class="legend muted">
             <span><i class="veh ab"></i>towards ${t.b.name}</span>
             <span><i class="veh ba"></i>towards ${t.a.name}</span>
+            <span><i class="veh wait"></i>at the platform</span>
           </div>
         </div>
       </div>
     `;
   }
 
-  private strip(t: TransitConfig, vehicles: Vehicle[], home: string) {
+  private strip(t: TransitConfig, vehicles: Vehicle[], home: string, waiting?: Dep) {
     const stops = t.stops;
     const W = 1000;
     const H = 250;
@@ -230,12 +235,25 @@ export class PageTransit extends PageBase {
       <line x1="${x(0)}" x2="${x(stops.length - 1)}" y1="${y}" y2="${y}" class="rail" />
       ${stops.map((s, i) => {
         const major = i === 0 || i === stops.length - 1 || s.name === home || s.major;
-        return svg`<g class="stop ${major ? "major" : ""} ${s.name === home ? "home" : ""}">
+        const isHome = s.name === home;
+        return svg`<g class="stop ${major ? "major" : ""} ${isHome ? "home" : ""} ${isHome && waiting ? "busy" : ""}">
+          ${isHome && waiting ? svg`<circle class="halo" cx="${x(i)}" cy="${y}" r="16" />` : nothing}
           <circle cx="${x(i)}" cy="${y}" r="${major ? 9 : 5}" />
           <text x="${x(i)}" y="${y - 22}" transform="rotate(-55 ${x(i)} ${y - 22})" text-anchor="start">${s.short ?? s.name}</text>
         </g>`;
       })}
-      ${vehicles.map((v) => {
+      ${(() => {
+        if (!waiting) return nothing;
+        const hi = Math.max(0, stops.findIndex((s) => s.name === home));
+        const hx = x(hi);
+        return svg`<g class="veh wait" transform="translate(${hx} ${y + 34})">
+          <title>At the platform, leaves ${hm(waiting.at)}</title>
+          <rect x="-24" y="-13" width="48" height="26" rx="8" />
+          <text class="wt" x="0" y="5" text-anchor="middle">${hm(waiting.at)}</text>
+        </g>
+        <text class="wlabel" x="${hx + 32}" y="${y + 40}">At the platform · leaves in ${minsWord(waiting.at)}</text>`;
+      })()}
+      ${vehicles.filter((v) => !(waiting && v.dir === "ab" && v.frac <= 0.001)).map((v) => {
         const vx = 30 + v.frac * (W - 130);
         const vy = v.dir === "ab" ? y + 34 : y + 70;
         return svg`<g class="veh ${v.dir} ${v.live ? "live" : ""}" transform="translate(${vx} ${vy})">
@@ -384,6 +402,38 @@ export class PageTransit extends PageBase {
         fill: var(--tile);
         stroke: var(--line);
         stroke-width: 4;
+      }
+      .stop .halo {
+        fill: none;
+        stroke: #3ddc84;
+        stroke-width: 4;
+        animation: halo 1.6s ease-in-out infinite;
+        transform-box: fill-box;
+        transform-origin: center;
+      }
+      @keyframes halo {
+        50% {
+          transform: scale(1.35);
+          opacity: 0.35;
+        }
+      }
+      .veh.wait rect {
+        fill: #3ddc84;
+        stroke: #fff;
+        stroke-width: 2;
+      }
+      .veh.wait .wt {
+        font-size: 13px;
+        font-weight: 700;
+        fill: #062b16;
+      }
+      .wlabel {
+        font-size: 15px;
+        font-weight: 600;
+        fill: #3ddc84;
+      }
+      .legend i.veh.wait {
+        background: #3ddc84;
       }
       .stop.home circle {
         fill: var(--line);
