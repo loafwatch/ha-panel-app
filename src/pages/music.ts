@@ -27,6 +27,7 @@ export class PageMusic extends PageBase {
   @state() private localRoom = 0;
   @state() private playlists: Pl[] = [];
   @state() private recent: Pl[] = [];
+  @state() private lyrics = false;
   @state() private q = "";
   @state() private found?: { tracks: Track[]; albums: Pl[]; artists: Pl[]; playlists: Pl[] } | null;
   @state() private searching = false;
@@ -255,6 +256,9 @@ export class PageMusic extends PageBase {
         </div>
         <div class="right">${this.lists(!!p)}</div>
       </div>
+      ${this.lyrics && p && r
+        ? html`<panel-lyrics .hass=${this.hass} entity=${r.player} proxy=${this.config.music?.lyrics_proxy ?? ""} @close=${() => (this.lyrics = false)}></panel-lyrics>`
+        : nothing}
     `;
   }
 
@@ -285,6 +289,7 @@ export class PageMusic extends PageBase {
             @click=${() => this.skip(1)}></div>
         </div>
         <div class="trow">
+          <button class="fav" aria-label="Lyrics" @click=${() => (this.lyrics = true)}><ha-icon icon="mdi:script-text-outline"></ha-icon></button>
           <div class="title ${long ? "long" : ""}">${t.title ?? "Playing"}</div>
           <button class="fav ${this.liked ? "on" : ""}" aria-label="Add to liked songs" @click=${this.like}>
             <ha-icon icon=${this.liked ? "mdi:heart" : "mdi:plus"}></ha-icon>

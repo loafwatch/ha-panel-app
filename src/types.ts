@@ -70,6 +70,8 @@ export interface PanelConfig {
   music?: {
     rooms: RoomConfig[];
     /** input_select shared with voice automations for the chosen music room. */
+    /** Optional backend fetcher service (e.g. a rest_command taking `url`) for lyrics if the tablet can't reach LRCLIB directly. */
+    lyrics_proxy?: string;
     room_entity?: string;
     /** Radio stations shown as a row of tiles: a Music Assistant URI (e.g. a BBC Sounds station) and a logo. */
     radio?: { name: string; uri: string; image?: string }[];
