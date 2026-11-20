@@ -62,6 +62,9 @@ export interface PanelConfig {
 
   weather?: string;
   calendars?: string[];
+  /** Local calendar for reminders. Each event's description carries "For: Family" or "For: <name>";
+   *  only family reminders are shown on the panel, personal ones just drive phone notifications. */
+  reminders?: { calendar: string; people?: string[] };
   todo_lists?: NamedEntity[];
 
   music?: {

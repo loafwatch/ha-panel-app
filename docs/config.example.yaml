@@ -11,6 +11,10 @@ panel_custom:
       idle_seconds: 120                       # photo screensaver after 2 minutes untouched
       weather: weather.home
       calendars: [calendar.family]
+      # Local calendar for reminders. Family ones show on the panel; personal ones only drive phone notifications.
+      reminders:
+        calendar: calendar.reminders
+        people: [person.alex, person.sam]
       todo_lists:
         - { name: Reminders, entity: todo.reminders, icon: "mdi:bell-outline" }
         - { name: Shopping, entity: todo.shopping, icon: "mdi:cart-outline" }

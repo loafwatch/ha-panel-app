@@ -24,6 +24,13 @@ export interface CalEvent {
   allDay: boolean;
   location?: string;
   calendar: string;
+  description?: string;
+}
+
+/** Who a reminder is for, read from its description ("For: Family" when unset). */
+export function reminderFor(description?: string): string {
+  const m = /^\s*For:\s*(.+?)\s*$/im.exec(description ?? "");
+  return m ? m[1] : "Family";
 }
 
 /**
@@ -99,7 +106,7 @@ export class DataHub extends EventTarget {
 
   /** Events from now (start of today) for `days` days. */
   async refreshEvents(days = 31) {
-    const cals = this.config.calendars ?? [];
+    const cals = [...(this.config.calendars ?? []), ...(this.config.reminders ? [this.config.reminders.calendar] : [])];
     if (!this.hass || !cals.length) return;
     this.events = await this.fetchEvents(new Date(new Date().setHours(0, 0, 0, 0)), days);
     this.changed();
@@ -117,7 +124,8 @@ export class DataHub extends EventTarget {
   }
 
   async fetchEvents(from: Date, days: number, calendars?: string[]): Promise<CalEvent[]> {
-    const cals = calendars ?? this.config.calendars ?? [];
+    const rem = this.config.reminders?.calendar;
+    const cals = calendars ?? [...(this.config.calendars ?? []), ...(rem && !(this.config.calendars ?? []).includes(rem) ? [rem] : [])];
     if (!this.hass || !cals.length) return [];
     const to = new Date(from.getTime() + days * 86400000);
     try {
@@ -135,7 +143,9 @@ export class DataHub extends EventTarget {
           const allDay = !String(e.start).includes("T");
           const start = allDay ? new Date(e.start + "T00:00:00") : new Date(e.start);
           const end = allDay ? new Date(e.end + "T00:00:00") : new Date(e.end);
-          out.push({ summary: tidyTitle(e.summary ?? ""), start, end, allDay, location: e.location, calendar: cal });
+          // personal reminders never show on the shared panel
+          if (cal === rem && reminderFor(e.description).toLowerCase() !== "family") continue;
+          out.push({ summary: tidyTitle(e.summary ?? ""), start, end, allDay, location: e.location, calendar: cal, description: e.description });
         }
       }
       return out.sort((a, b) => a.start.getTime() - b.start.getTime() || Number(b.allDay) - Number(a.allDay));
