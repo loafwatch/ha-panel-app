@@ -19,6 +19,7 @@ import "./pages/recipes";
 import "./pages/iptv";
 import "./components/voice";
 import "./components/screensaver";
+import "./components/volume";
 
 declare const __HPA_VERSION__: string;
 export const VERSION = __HPA_VERSION__;

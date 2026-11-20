@@ -123,6 +123,8 @@ export interface PanelConfig {
    */
   match?: { sensor: string; label?: string; color?: string; icon?: string };
   media?: { url: string; title?: string };
+  /** `number` entity for the tablet's media volume (e.g. VACA's music volume); shown on Live TV and Media. */
+  volume?: string;
   /** Recipes page backed by the Mealie integration. `url` is Mealie's address (for photos). */
   recipes?: { url?: string; config_entry?: string };
   /** Live TV page: an M3U playlist (e.g. a free-to-air list from iptv-org). */

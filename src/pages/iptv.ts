@@ -202,6 +202,7 @@ export class PageIptv extends PageBase {
             ${this.status ? html`<div class="pstatus">${this.status}</div>` : nothing}
             <div class="pbot">
               <button class="pb" aria-label="Previous channel" @click=${() => this.step(-1)}><ha-icon icon="mdi:chevron-left"></ha-icon></button>
+              ${this.config.volume ? html`<panel-volume .hass=${this.hass} entity=${this.config.volume}></panel-volume>` : nothing}
               <button class="pb" aria-label="Next channel" @click=${() => this.step(1)}><ha-icon icon="mdi:chevron-right"></ha-icon></button>
             </div>
           </div>`

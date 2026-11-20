@@ -11,6 +11,8 @@ panel_custom:
       idle_seconds: 120                       # photo screensaver after 2 minutes untouched
       weather: weather.home
       calendars: [calendar.family]
+      # Tablet media volume, shown as a volume pill on Live TV and Media
+      volume: number.example_tablet_music_volume
       # Local calendar for reminders. Family ones show on the panel; personal ones only drive phone notifications.
       reminders:
         calendar: calendar.reminders
