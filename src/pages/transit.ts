@@ -213,9 +213,6 @@ export class PageTransit extends PageBase {
               ${updated ? html` · board ${hm(updated)}` : nothing}
             </div>
           </div>
-          ${atPlatform && first
-            ? html`<div class="waitpill"><span class="dot"></span>Tram at ${home} now · leaves ${hm(first.at)} (in ${minsWord(first.at)})</div>`
-            : nothing}
           <div class="mapwrap">${this.strip(t, vehicles, home, atPlatform ? first : undefined)}</div>
           <div class="legend muted">
             <span><i class="veh ab"></i>towards ${t.b.name}</span>
@@ -428,26 +425,6 @@ export class PageTransit extends PageBase {
         font-size: 13px;
         font-weight: 700;
         fill: #062b16;
-      }
-      .waitpill {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        margin: 6px 0 2px;
-        padding: 8px 16px;
-        border-radius: 999px;
-        border: 2px solid #3ddc84;
-        background: rgba(61, 220, 132, 0.12);
-        color: #3ddc84;
-        font-weight: 700;
-        font-size: 16px;
-      }
-      .waitpill .dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: #3ddc84;
-        animation: halo 1.6s ease-in-out infinite;
       }
       .legend i.veh.wait {
         background: #3ddc84;
