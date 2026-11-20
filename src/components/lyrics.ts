@@ -2,7 +2,7 @@ import { reg } from "../registry";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
 import type { HomeAssistant } from "../types";
-import { mediaPosition } from "../util";
+import { keepAwake, mediaPosition } from "../util";
 
 interface Line {
   t: number;
@@ -64,6 +64,7 @@ export class PanelLyrics extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.timer = window.setInterval(() => this.tick(), 250);
+    keepAwake(this, true);
   }
 
   disconnectedCallback() {
@@ -180,6 +181,7 @@ export class PanelLyrics extends LitElement {
   }
 
   private close() {
+    keepAwake(this, false);
     this.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
   }
 

@@ -84,6 +84,7 @@ export class HaPanelApp extends LitElement {
     this.addEventListener("panel-navigate", this.onNavigate as EventListener);
     this.addEventListener("panel-toast", this.onToast as EventListener);
     this.addEventListener("panel-wake", this.wake);
+    this.addEventListener("panel-keep-awake", this.onKeepAwake as EventListener);
     window.addEventListener("pointerdown", this.activity, { capture: true, passive: true });
     this.addEventListener("pointerdown", this.onPointerDown, { capture: true, passive: true });
     this.addEventListener("pointermove", this.onPointerMove, { capture: true, passive: true });
@@ -202,12 +203,22 @@ export class HaPanelApp extends LitElement {
     if (s > 0) this.idleTimer = window.setTimeout(() => this.idle(), s * 1000);
   }
 
+  /** Things on screen the user is watching without touching (lyrics, live TV). */
+  private awake = new Set<HTMLElement>();
+
+  private onKeepAwake = (e: CustomEvent<{ on: boolean }>) => {
+    const src = e.composedPath()[0] as HTMLElement;
+    if (e.detail.on) this.awake.add(src);
+    else this.awake.delete(src);
+  };
+
   private idle() {
+    for (const el of this.awake) if (!el.isConnected) this.awake.delete(el);
     const voice = this.renderRoot.querySelector("panel-voice") as unknown as { open?: boolean } | null;
     const alarm = this.config.timers?.alarm_switch;
     const ringing = !!alarm && this.hass?.states[alarm]?.state === "on";
     const watching = this.pages[this.index]?.id === "media";
-    if (voice?.open || ringing || watching) return this.resetIdle();
+    if (voice?.open || ringing || watching || this.awake.size) return this.resetIdle();
     this.saver = true;
   }
 

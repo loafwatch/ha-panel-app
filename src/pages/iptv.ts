@@ -4,6 +4,7 @@ import { state } from "lit/decorators.js";
 import Hls from "hls.js/dist/hls.light.mjs";
 import mpegts from "mpegts.js";
 import { PageBase } from "./base";
+import { keepAwake } from "../util";
 
 interface Channel {
   name: string;
@@ -91,6 +92,7 @@ export class PageIptv extends PageBase {
 
   private async play(c: Channel) {
     this.playing = c;
+    keepAwake(this, true);
     this.status = "Loading…";
     await this.updateComplete;
     const v = this.renderRoot.querySelector("video") as HTMLVideoElement | null;
@@ -151,6 +153,7 @@ export class PageIptv extends PageBase {
     }
     this.playing = undefined;
     this.status = "";
+    keepAwake(this, false);
   }
 
   render() {

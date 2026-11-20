@@ -81,6 +81,7 @@ export class PageMusic extends PageBase {
 
   protected updated(changed: PropertyValues) {
     super.updated(changed);
+    if (changed.has("active") && !this.active && this.lyrics) this.lyrics = false;
     if (this.active && (this.libState === "idle" || Date.now() - this.libLoaded > 15 * 60 * 1000)) this.loadLibrary();
     else if (this.active && this.libState === "ok" && Date.now() - this.recentLoaded > 60 * 1000) this.loadRecent();
     this.trackChange();

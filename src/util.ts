@@ -140,3 +140,9 @@ export function longPress(onTap: () => void, onHold: () => void, ms = 550) {
     cancel,
   };
 }
+
+/** Ask the panel not to switch to the photo screensaver while `el` is showing something
+ *  the user is watching (lyrics, live TV). Disconnected elements are ignored automatically. */
+export function keepAwake(el: HTMLElement, on: boolean) {
+  el.dispatchEvent(new CustomEvent("panel-keep-awake", { detail: { on }, bubbles: true, composed: true }));
+}
