@@ -2,13 +2,22 @@ import type { HomeAssistant, RoomConfig } from "../types";
 
 const STALE = ["off", "idle", "unavailable", "standby", "unknown"];
 
+/** How long a pause is honoured even if the speaker itself reports it has stopped
+ *  (Sonos drops a paused Music Assistant stream to "idle" straight away). */
+export const PAUSE_HOLD_MS = 5 * 60_000;
+
 /** Is this room really playing? Music Assistant can keep a stale "paused"
  *  state after the device itself has stopped, so the device is checked too. */
 export function roomState(hass: HomeAssistant, r: RoomConfig): "playing" | "paused" | null {
   const p = hass.states[r.player];
   if (!p || (p.state !== "playing" && p.state !== "paused")) return null;
   const d = r.device ? hass.states[r.device] : undefined;
-  if (d && STALE.includes(d.state)) return null;
+  if (d && STALE.includes(d.state)) {
+    // a fresh pause is real: keep it for a few minutes so you can pick up where you left off
+    const since = Date.now() - new Date(p.last_changed).getTime();
+    if (p.state === "paused" && since < PAUSE_HOLD_MS) return "paused";
+    return null;
+  }
   return p.state as "playing" | "paused";
 }
 
