@@ -2,7 +2,7 @@ import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
-import { call } from "../util";
+import { call, keepAwake } from "../util";
 
 /** A recipe card, normalised from the Mealie integration's responses. */
 interface Card {
@@ -52,6 +52,8 @@ export class PageRecipes extends PageBase {
   }
 
   protected updated(changed: Map<string, unknown>) {
+    // keep the screensaver away while a recipe is open (hands are busy cooking)
+    if (changed.has("open") || changed.has("active")) keepAwake(this, !!this.open && this.active);
     super.updated?.(changed as any);
     if (this.active && (this.loadState === "idle" || Date.now() - this.loadedAt > 10 * 60 * 1000)) this.load();
   }
