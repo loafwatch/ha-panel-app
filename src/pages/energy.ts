@@ -268,8 +268,10 @@ export class PageEnergy extends PageBase {
     const hiOn = !!dev && this.kind === "electricity" && bars.some((b) => hiOf(b) != null);
     const hiTotal = hiOn ? past.reduce((s, b) => s + (hiOf(b) ?? 0), 0) : 0;
     const share = hiOn && total > 0 ? Math.round((hiTotal / total) * 100) : undefined;
-    return html`
-      <div class="sum ${sel ? "withbd" : ""}">
+    const bd = sel ? this.breakdown(sel) : nothing;
+    return html`<div class="cwrap ${bd !== nothing ? "split" : ""}">
+      <div class="cmain">
+      <div class="sum">
         <div class="sumtxt">
         ${sel
           ? html`<div class="big">${this.amt(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}${hiOn && hiOf(sel) != null ? html`<span class="hi">${dev!.name} ${this.amt(hiOf(sel)!)}${sel.kwh > 0 ? ` · ${Math.round((hiOf(sel)! / sel.kwh) * 100)}%` : ""}</span>` : nothing}</div>
@@ -277,7 +279,6 @@ export class PageEnergy extends PageBase {
           : html`<div class="big">${this.amt(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}${hiOn ? html`<span class="hi">${dev!.name} ${this.amt(hiTotal)} · ${share ?? 0}%</span>` : nothing}</div>
               <div class="muted">${this.rangeLabel()} · average ${this.amt(avg)} ${unitWord}</div>`}
         </div>
-        ${sel ? this.breakdown(sel) : nothing}
       </div>
       <div class="bars ${this.kind} ${hiOn ? "hilite" : ""}" @click=${(e: Event) => e.target === e.currentTarget && (this.sel = undefined)}>
         ${[0.25, 0.5, 0.75].map((f) => html`<i class="gl" style="bottom:${f * 100}%"></i>`)}
@@ -294,7 +295,14 @@ export class PageEnergy extends PageBase {
         )}
       </div>
       <div class="axis muted">${bars.map((b, i) => html`<span>${this.tickLabel(b.t, i)}</span>`)}</div>
-    `;
+      </div>
+      ${bd !== nothing
+        ? html`<aside class="side">
+            <div class="sidehead"><span>Breakdown</span><button class="x" aria-label="Close breakdown" @click=${() => (this.sel = undefined)}><ha-icon icon="mdi:close"></ha-icon></button></div>
+            ${bd}
+          </aside>`
+        : nothing}
+    </div>`;
   }
 
   /** Octoplus line: points, free spins and the next saving session. */
@@ -414,6 +422,63 @@ export class PageEnergy extends PageBase {
         min-height: 120px;
         height: auto;
       }
+      /* chart on the left, appliance breakdown alongside it when a bar is picked */
+      .cwrap {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        gap: 20px;
+      }
+      .cmain {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .side {
+        flex: none;
+        width: 400px;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: var(--tile-2, rgba(255, 255, 255, 0.05));
+        align-self: stretch;
+        animation: sidein 0.18s ease-out;
+      }
+      @keyframes sidein {
+        from {
+          opacity: 0;
+          transform: translateX(12px);
+        }
+      }
+      .sidehead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-2);
+        margin-bottom: 6px;
+      }
+      .side .x {
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 0;
+        background: transparent;
+        color: var(--text-2);
+        cursor: pointer;
+        --mdc-icon-size: 20px;
+      }
+      .side .bd {
+        flex: none;
+      }
       /* phones: let the page scroll and give the chart a fixed height */
       @media (max-width: 700px) {
         .page.fill {
@@ -425,6 +490,12 @@ export class PageEnergy extends PageBase {
         }
         .chart {
           flex: none;
+        }
+        .cwrap {
+          flex-direction: column;
+        }
+        .side {
+          width: auto;
         }
         .chart .bars {
           flex: none;
