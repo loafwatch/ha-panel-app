@@ -205,6 +205,7 @@ export class PageEnergy extends PageBase {
               </div>`
             : nothing}
         </div>
+        <div class="lower">
         <div class="tile chart">
           <div class="chead">
             <div class="seg">
@@ -230,19 +231,9 @@ export class PageEnergy extends PageBase {
               )}
             </div>
           </div>
-          ${this.kind === "electricity" && en.devices?.length
-            ? html`<div class="devrow">
-                <span class="devlabel muted">Highlight</span>
-                ${en.devices.map((d, i) =>
-                  d.energy
-                    ? html`<button class="chip dev ${this.dev === i ? "on" : ""}" @click=${() => (this.dev = this.dev === i ? undefined : i)}>
-                        <ha-icon icon=${d.icon ?? "mdi:power-plug-outline"}></ha-icon>${d.name}${this.liveW(d.power)}
-                      </button>`
-                    : nothing,
-                )}
-              </div>`
-            : nothing}
           ${this.chart()}
+        </div>
+        ${this.bdCard()}
         </div>
       </div>
     `;
@@ -268,9 +259,7 @@ export class PageEnergy extends PageBase {
     const hiOn = !!dev && this.kind === "electricity" && bars.some((b) => hiOf(b) != null);
     const hiTotal = hiOn ? past.reduce((s, b) => s + (hiOf(b) ?? 0), 0) : 0;
     const share = hiOn && total > 0 ? Math.round((hiTotal / total) * 100) : undefined;
-    const bd = sel ? this.breakdown(sel) : nothing;
-    return html`<div class="cwrap ${bd !== nothing ? "split" : ""}">
-      <div class="cmain">
+    return html`
       <div class="sum">
         <div class="sumtxt">
         ${sel
@@ -295,14 +284,7 @@ export class PageEnergy extends PageBase {
         )}
       </div>
       <div class="axis muted">${bars.map((b, i) => html`<span>${this.tickLabel(b.t, i)}</span>`)}</div>
-      </div>
-      ${bd !== nothing
-        ? html`<aside class="side">
-            <div class="sidehead"><span>Breakdown</span><button class="x" aria-label="Close breakdown" @click=${() => (this.sel = undefined)}><ha-icon icon="mdi:close"></ha-icon></button></div>
-            ${bd}
-          </aside>`
-        : nothing}
-    </div>`;
+    `;
   }
 
   /** Octoplus line: points, free spins and the next saving session. */
@@ -334,11 +316,45 @@ export class PageEnergy extends PageBase {
     return html`<span class="w">${w >= 1000 ? (w / 1000).toFixed(1) + " kW" : Math.round(w) + " W"}</span>`;
   }
 
+  /** Right-hand card: appliance breakdown for the period, or for the tapped bar. */
+  private bdCard() {
+    const devs = this.config.energy?.devices ?? [];
+    if (this.kind !== "electricity" || !devs.some((d) => d.energy)) return nothing;
+    const bars = this.bars ?? [];
+    const sel = this.sel != null ? bars[this.sel] : undefined;
+    const past = bars.filter((b) => !b.future);
+    const n = devs.length;
+    const whole: Bar | undefined = past.length
+      ? {
+          t: past[0].t,
+          future: false,
+          kwh: past.reduce((s, b) => s + b.kwh, 0),
+          parts: past.some((b) => b.parts) ? Array.from({ length: n }, (_, i) => past.reduce((s, b) => s + (b.parts?.[i] ?? 0), 0)) : undefined,
+        }
+      : undefined;
+    const target = sel ?? whole;
+    const unit = this.range === "day" ? "hour" : this.range === "year" ? "month" : "day";
+    return html`<div class="tile bdcard">
+      <div class="label bdhead">
+        <ha-icon icon="mdi:chart-donut"></ha-icon>
+        <span class="grow">${sel ? this.slotLabel(sel.t, true) : this.rangeLabel()}</span>
+        ${sel
+          ? html`<button class="x" aria-label="Back to the whole period" @click=${() => (this.sel = undefined)}><ha-icon icon="mdi:close"></ha-icon></button>`
+          : nothing}
+      </div>
+      ${target ? this.breakdown(target) : html`<div class="muted">Loading…</div>`}
+      <div class="muted bdhint">Tap an appliance to highlight it${sel ? "" : ` · tap a bar to see that ${unit}`}</div>
+    </div>`;
+  }
+
   /** What made up a selected bar: each appliance's kWh and share, plus everything else. */
   private breakdown(b: Bar) {
     const devs = this.config.energy?.devices ?? [];
-    if (!b.parts || !devs.length || b.kwh <= 0 || this.kind !== "electricity") return nothing;
-    const rows = devs.map((d, i) => ({ name: d.name, icon: d.icon, v: b.parts![i], i })).filter((r) => r.v > 0.005).sort((p, q) => q.v - p.v);
+    if (!b.parts || !devs.length || b.kwh <= 0) return html`<div class="muted">No readings for this period yet</div>`;
+    const rows = devs
+      .map((d, i) => ({ name: d.name, icon: d.icon, power: d.power, v: b.parts![i] ?? 0, i }))
+      .filter((r) => r.v > 0.005)
+      .sort((p, q) => q.v - p.v);
     const known = rows.reduce((s, r) => s + r.v, 0);
     const other = Math.max(0, b.kwh - known);
     const pct = (v: number) => Math.round((v / b.kwh) * 100);
@@ -346,7 +362,7 @@ export class PageEnergy extends PageBase {
       ${rows.map(
         (r) => html`<button class="bdrow ${this.dev === r.i ? "on" : ""}" @click=${() => (this.dev = this.dev === r.i ? undefined : r.i)}>
           <ha-icon icon=${r.icon ?? "mdi:power-plug-outline"}></ha-icon>
-          <span class="bdn">${r.name}</span>
+          <span class="bdn">${r.name}<small>${this.liveW(r.power)}</small></span>
           <span class="bdbar"><i style="width:${pct(r.v)}%"></i></span>
           <b>${pct(r.v)}%</b><span class="muted">${this.amt(r.v)}</span>
         </button>`,
@@ -422,53 +438,44 @@ export class PageEnergy extends PageBase {
         min-height: 120px;
         height: auto;
       }
-      /* chart on the left, appliance breakdown alongside it when a bar is picked */
-      .cwrap {
+      /* graph card on the left, appliance breakdown card on the right */
+      .lower {
         flex: 1;
         min-height: 0;
         display: flex;
-        gap: 20px;
+        gap: var(--gap, 16px);
       }
-      .cmain {
+      .lower .chart {
         flex: 1;
         min-width: 0;
+      }
+      .bdcard {
+        flex: none;
+        width: 380px;
         min-height: 0;
         display: flex;
         flex-direction: column;
+        gap: 6px;
       }
-      .side {
-        flex: none;
-        width: 400px;
+      .bdcard .bd {
+        flex: 1;
         min-height: 0;
         overflow-y: auto;
-        padding: 12px 14px;
-        border-radius: 16px;
-        background: var(--tile-2, rgba(255, 255, 255, 0.05));
-        align-self: stretch;
-        animation: sidein 0.18s ease-out;
+        align-content: start;
       }
-      @keyframes sidein {
-        from {
-          opacity: 0;
-          transform: translateX(12px);
-        }
-      }
-      .sidehead {
+      .bdhead {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        font-size: 13px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--text-2);
-        margin-bottom: 6px;
       }
-      .side .x {
+      .bdhead .grow {
+        flex: 1;
+      }
+      .bdcard .x {
         display: grid;
         place-items: center;
         width: 36px;
         height: 36px;
+        margin: -8px -6px -8px 0;
         border-radius: 50%;
         border: 0;
         background: transparent;
@@ -476,8 +483,13 @@ export class PageEnergy extends PageBase {
         cursor: pointer;
         --mdc-icon-size: 20px;
       }
-      .side .bd {
-        flex: none;
+      .bdhint {
+        font-size: 12px;
+      }
+      .bdn small .w {
+        margin-left: 6px;
+        font-size: 11px;
+        color: var(--cy);
       }
       /* phones: let the page scroll and give the chart a fixed height */
       @media (max-width: 700px) {
@@ -491,10 +503,11 @@ export class PageEnergy extends PageBase {
         .chart {
           flex: none;
         }
-        .cwrap {
+        .lower {
           flex-direction: column;
+          flex: none;
         }
-        .side {
+        .bdcard {
           width: auto;
         }
         .chart .bars {
@@ -671,13 +684,13 @@ export class PageEnergy extends PageBase {
       }
       .bdrow {
         display: grid;
-        grid-template-columns: 22px 130px 1fr 42px 64px;
+        grid-template-columns: 22px minmax(0, 1.4fr) 1fr 40px 66px;
         align-items: center;
         gap: 8px;
-        font-size: 13px;
+        font-size: 15px;
         background: none;
         border: 0;
-        padding: 2px 6px;
+        padding: 7px 6px;
         border-radius: 8px;
         color: var(--text);
         text-align: left;
