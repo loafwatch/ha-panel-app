@@ -451,7 +451,7 @@ export class PageEnergy extends PageBase {
       }
       .bdcard {
         flex: none;
-        width: 380px;
+        width: 460px;
         min-height: 0;
         display: flex;
         flex-direction: column;
@@ -684,7 +684,7 @@ export class PageEnergy extends PageBase {
       }
       .bdrow {
         display: grid;
-        grid-template-columns: 22px minmax(0, 1.4fr) 1fr 40px 66px;
+        grid-template-columns: 22px minmax(150px, auto) 1fr 40px 66px;
         align-items: center;
         gap: 8px;
         font-size: 15px;
