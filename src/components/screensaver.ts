@@ -86,8 +86,14 @@ export class PanelScreensaver extends LitElement {
     // After 7pm the day's business is usually done, so look to tomorrow instead.
     const now = new Date();
     const from = now.getHours() >= 19 ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) : now;
-    const next = this.hub.events.find((e) => e.end.getTime() > from.getTime() && (now.getHours() < 19 || e.start.getTime() >= from.getTime()));
-    const rem = (c.todo_lists?.[0] ? this.hub.todos[c.todo_lists[0].entity] ?? [] : []).filter((i) => i.status === "needs_action");
+    const remCal = c.reminders?.calendar;
+    const next = this.hub.events.find(
+      (e) => e.calendar !== remCal && e.end.getTime() > from.getTime() && (now.getHours() < 19 || e.start.getTime() >= from.getTime()),
+    );
+    // today's family reminders get their own pills, from the morning until 3 hours after they're due
+    const rem = remCal
+      ? this.hub.events.filter((e) => e.calendar === remCal && e.start.toDateString() === now.toDateString() && now.getTime() < e.start.getTime() + 3 * 3600000)
+      : [];
     const bins = binsInfo(this.hass, c);
     // energy saving session: show today's (glowing while it's on) or the next one within two days
     const sv = this.hub.savings.find((e) => e.end > now && e.start.getTime() - now.getTime() < 2 * 86400000);
@@ -155,7 +161,14 @@ export class PanelScreensaver extends LitElement {
           ${next
             ? html`<div class="pill"><ha-icon icon="mdi:calendar"></ha-icon>${dayLabel(next.start)}${next.allDay ? "" : " " + fmtTime(next.start)} · ${next.summary}</div>`
             : nothing}
-          ${rem.slice(0, 3).map((r) => html`<div class="pill"><ha-icon icon="mdi:bell-outline"></ha-icon>${r.summary}</div>`)}
+          ${rem
+            .slice(0, 3)
+            .map(
+              (r) =>
+                html`<div class="pill rem ${r.start.getTime() <= now.getTime() ? "due" : ""}">
+                  <ha-icon icon="mdi:bell-outline"></ha-icon>${r.allDay ? "" : fmtTime(r.start) + " · "}${r.summary}
+                </div>`,
+            )}
         </div>
       </div>
     `;
@@ -366,6 +379,13 @@ export class PanelScreensaver extends LitElement {
         to {
           transform: rotate(360deg);
         }
+      }
+      .pill.rem ha-icon {
+        color: #3ddc84;
+      }
+      .pill.rem.due {
+        border-color: #3ddc84;
+        box-shadow: 0 0 16px rgba(61, 220, 132, 0.45);
       }
       .pill.match {
         border: 2px solid var(--mc);
