@@ -31,6 +31,8 @@ export class PageCalendar extends PageBase {
   @state() private selected = new Date(new Date().setHours(0, 0, 0, 0));
   @state() private events: CalEvent[] = [];
   private loadedFor = "";
+  /** When someone last tapped a day; an old pick (or "today" itself) follows the clock. */
+  private pickedAt = 0;
   @state() private draft?: RemDraft;
   @state() private picked?: CalEvent;
   @state() private busy = false;
@@ -157,6 +159,21 @@ export class PageCalendar extends PageBase {
     </div>`;
   }
 
+  /** Move back to today after midnight, or when returning to the page after a while. */
+  private followToday() {
+    const today = new Date(new Date().setHours(0, 0, 0, 0));
+    if (sameDay(this.selected, today)) return;
+    const stale = Date.now() - this.pickedAt > 10 * 60_000;
+    if (!stale) return;
+    this.selected = today;
+    if (!sameDay(startOfMonth(today), this.month)) this.month = startOfMonth(today);
+  }
+
+  protected willUpdate(c: Map<string, unknown>) {
+    super.willUpdate?.(c as any);
+    this.followToday();
+  }
+
   protected updated(c: Map<string, unknown>) {
     super.updated(c as any);
     const key = this.month.toISOString();
@@ -213,7 +230,10 @@ export class PageCalendar extends PageBase {
                 const evs = this.eventsOn(d);
                 const other = d.getMonth() !== this.month.getMonth();
                 return html`<button class="cell ${other ? "other" : ""} ${sameDay(d, today) ? "today" : ""} ${sameDay(d, this.selected) ? "sel" : ""}"
-                  @click=${() => (this.selected = d)}>
+                  @click=${() => {
+                    this.selected = d;
+                    this.pickedAt = Date.now();
+                  }}>
                   <span class="num">${d.getDate()}</span>
                   <span class="dots">${evs.slice(0, 4).map((e) => html`<i style="background:${this.color(e.calendar)}"></i>`)}</span>
                   <span class="mini">${evs.slice(0, 2).map((e) => html`<em>${e.summary}</em>`)}</span>
