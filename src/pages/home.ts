@@ -2,6 +2,7 @@ import { reg } from "../registry";
 import { css, html, nothing, svg } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
+import { isDone } from "../data";
 import { activeRoom, roomState } from "./music-state";
 import { binsInfo } from "./bins";
 import { timersOf, cancelTimer } from "./timers-state";
@@ -71,7 +72,8 @@ export class PageHome extends PageBase {
   }
 
   private upcomingTile() {
-    const evs = this.hub.events.filter((e) => e.end.getTime() > Date.now()).slice(0, 7);
+    const remCal = this.config.reminders?.calendar;
+    const evs = this.hub.events.filter((e) => e.end.getTime() > Date.now() && !(e.calendar === remCal && isDone(e.description))).slice(0, 7);
     let last = "";
     return html`
       <div class="tile tap upcoming" @click=${() => this.navigate("calendar")}>

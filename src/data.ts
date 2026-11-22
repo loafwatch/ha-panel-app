@@ -27,6 +27,21 @@ export interface CalEvent {
   description?: string;
 }
 
+/** A family reminder as stored on the reminders calendar, with what's needed to tick it off. */
+export interface Reminder {
+  summary: string;
+  start: Date;
+  allDay: boolean;
+  uid: string;
+  recurrenceId?: string;
+  description: string;
+  rawStart: any;
+  rawEnd: any;
+  done: boolean;
+}
+
+export const isDone = (description?: string) => /^\s*Done:\s*yes\s*$/im.test(description ?? "");
+
 /** Who a reminder is for, read from its description ("For: Family" when unset). */
 export function reminderFor(description?: string): string {
   const m = /^\s*For:\s*(.+?)\s*$/im.exec(description ?? "");
@@ -110,7 +125,68 @@ export class DataHub extends EventTarget {
     if (!this.hass || !cals.length) return;
     this.events = await this.fetchEvents(new Date(new Date().setHours(0, 0, 0, 0)), days);
     this.changed();
+    this.refreshReminders();
     this.refreshSavings();
+  }
+
+  /** Family reminders from the last 30 days to the end of today, done or not (oldest first). */
+  reminders: Reminder[] = [];
+
+  async refreshReminders() {
+    const cal = this.config.reminders?.calendar;
+    if (!this.hass || !cal) return;
+    const from = new Date(Date.now() - 30 * 86400000);
+    const to = new Date(new Date().setHours(23, 59, 59, 0));
+    try {
+      const list: any[] = await (this.hass as any).callApi(
+        "GET",
+        `calendars/${cal}?start=${encodeURIComponent(from.toISOString())}&end=${encodeURIComponent(to.toISOString())}`,
+      );
+      this.reminders = list
+        .filter((e) => reminderFor(e.description).toLowerCase() === "family")
+        .map((e) => {
+          const allDay = !e.start?.dateTime;
+          return {
+            summary: tidyTitle(e.summary ?? ""),
+            start: allDay ? new Date(e.start.date + "T00:00:00") : new Date(e.start.dateTime),
+            allDay,
+            uid: e.uid,
+            recurrenceId: e.recurrence_id ?? undefined,
+            description: e.description ?? "",
+            rawStart: e.start,
+            rawEnd: e.end,
+            done: isDone(e.description),
+          };
+        })
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+      this.changed();
+    } catch (e) {
+      console.warn("ha-panel-app: reminders", e);
+    }
+  }
+
+  /** Tick a reminder off: marks just this occurrence "Done: yes" so repeats still come round. */
+  async markReminderDone(r: Reminder) {
+    const cal = this.config.reminders?.calendar;
+    if (!this.hass || !cal) return;
+    const val = (x: any) => x?.dateTime ?? x?.date;
+    const event: Record<string, string> = {
+      summary: r.summary,
+      dtstart: val(r.rawStart),
+      dtend: val(r.rawEnd),
+      description: `${r.description.replace(/^\s*Done:.*$/gim, "").trim()}\nDone: yes`,
+    };
+    const msg: Record<string, any> = { type: "calendar/event/update", entity_id: cal, uid: r.uid, event };
+    if (r.recurrenceId) msg.recurrence_id = r.recurrenceId;
+    r.done = true; // feels instant; the refresh below confirms it
+    this.changed();
+    try {
+      await this.hass.callWS(msg);
+    } finally {
+      await this.refreshReminders();
+      this.events = await this.fetchEvents(new Date(new Date().setHours(0, 0, 0, 0)), 31);
+      this.changed();
+    }
   }
 
   /** Upcoming energy saving sessions (from energy.octopus.saving_calendar), next 14 days. */

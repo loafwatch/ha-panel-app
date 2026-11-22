@@ -3,7 +3,7 @@ import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
 import type { PanelConfig } from "../types";
-import type { CalEvent } from "../data";
+import { isDone, type CalEvent } from "../data";
 import { fmtTime, sameDay } from "../util";
 
 const REPEATS: [string, string][] = [
@@ -92,6 +92,33 @@ export class PageCalendar extends PageBase {
     return list.find((x) => x.summary === e.summary && new Date(x.start.dateTime ?? x.start.date).getTime() === e.start.getTime());
   }
 
+  private async markDone(e: CalEvent) {
+    this.busy = true;
+    try {
+      const ev = await this.stored(e);
+      if (!ev) throw new Error("not found");
+      await this.hub.markReminderDone({
+        summary: ev.summary,
+        start: e.start,
+        allDay: e.allDay,
+        uid: ev.uid,
+        recurrenceId: ev.recurrence_id ?? undefined,
+        description: ev.description ?? "",
+        rawStart: ev.start,
+        rawEnd: ev.end,
+        done: false,
+      });
+      this.toast(`Done: ${e.summary}`);
+      this.picked = undefined;
+      this.loadedFor = "";
+      this.load();
+    } catch (err: any) {
+      this.toast(`Couldn't mark it done: ${err?.message ?? err}`);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   private async deleteReminder(e: CalEvent, all: boolean) {
     this.busy = true;
     try {
@@ -124,6 +151,9 @@ export class PageCalendar extends PageBase {
           <div class="ptitle">${p.summary}</div>
           <div class="muted">${p.start.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} at ${fmtTime(p.start)}</div>
           <div class="row">
+            ${isDone(p.description)
+              ? html`<span class="donebadge"><ha-icon icon="mdi:check-circle"></ha-icon>Done</span>`
+              : html`<button class="btn primary" ?disabled=${this.busy} @click=${() => this.markDone(p)}><ha-icon icon="mdi:check"></ha-icon> Mark as done</button>`}
             <button class="btn" ?disabled=${this.busy} @click=${() => this.deleteReminder(p, false)}>Delete this one</button>
             <button class="btn" ?disabled=${this.busy} @click=${() => this.deleteReminder(p, true)}>Delete this and future repeats</button>
             <span class="grow"></span>
@@ -247,7 +277,7 @@ export class PageCalendar extends PageBase {
               ${this.remCal ? html`<button class="btn addrem" @click=${() => this.newReminder()}><ha-icon icon="mdi:bell-plus-outline"></ha-icon>Reminder</button>` : nothing}</div>
             ${dayEvents.length
               ? dayEvents.map(
-                  (e) => html`<div class="ev ${e.calendar === this.remCal ? "rem" : ""}" style="--c:${this.color(e.calendar)}"
+                  (e) => html`<div class="ev ${e.calendar === this.remCal ? "rem" : ""} ${e.calendar === this.remCal && isDone(e.description) ? "done" : ""}" style="--c:${this.color(e.calendar)}"
                     @click=${() => e.calendar === this.remCal && ((this.draft = undefined), (this.picked = e))}>
                     <div class="when">${e.allDay ? "All day" : e.calendar === this.remCal ? fmtTime(e.start) : html`${fmtTime(e.start)}<br /><span class="muted">${fmtTime(e.end)}</span>`}</div>
                     <div class="what"><div class="sum">${e.calendar === this.remCal ? html`<ha-icon class="bell" icon="mdi:bell-outline"></ha-icon>` : nothing}${e.summary}</div>${e.location ? html`<div class="loc muted">${e.location}</div>` : nothing}</div>
@@ -415,6 +445,17 @@ export class PageCalendar extends PageBase {
       }
       .ev.rem {
         cursor: pointer;
+      }
+      .ev.done .sum {
+        text-decoration: line-through;
+        opacity: 0.55;
+      }
+      .donebadge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #3ddc84;
+        font-weight: 600;
       }
       .bell {
         --mdc-icon-size: 16px;

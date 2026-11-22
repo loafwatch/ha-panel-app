@@ -2,7 +2,7 @@ import { reg } from "../registry";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
 import { tokens } from "../styles";
-import type { DataHub } from "../data";
+import type { DataHub, Reminder } from "../data";
 import type { HomeAssistant, PanelConfig } from "../types";
 import { binsInfo } from "../pages/bins";
 import { timerLabel, timersOf } from "../pages/timers-state";
@@ -61,6 +61,13 @@ export class PanelScreensaver extends LitElement {
     this.dispatchEvent(new CustomEvent("panel-wake", { detail: { page: "timers" }, bubbles: true, composed: true }));
   };
 
+  /** Tick a reminder off from the kiosk without waking it. */
+  private tick(e: PointerEvent, r: Reminder) {
+    e.stopPropagation();
+    this.hub.markReminderDone(r);
+    this.dispatchEvent(new CustomEvent("panel-toast", { detail: `Done: ${r.summary}`, bubbles: true, composed: true }));
+  }
+
   /** Tapping "now playing" wakes straight onto the Music page. */
   private toMusic = (e: PointerEvent) => {
     e.stopPropagation();
@@ -90,10 +97,8 @@ export class PanelScreensaver extends LitElement {
     const next = this.hub.events.find(
       (e) => e.calendar !== remCal && e.end.getTime() > from.getTime() && (now.getHours() < 19 || e.start.getTime() >= from.getTime()),
     );
-    // today's family reminders get their own pills, from the morning until 3 hours after they're due
-    const rem = remCal
-      ? this.hub.events.filter((e) => e.calendar === remCal && e.start.toDateString() === now.toDateString() && now.getTime() < e.start.getTime() + 3 * 3600000)
-      : [];
+    // family reminders stay until ticked off: today's, plus any missed from earlier days
+    const rem = this.hub.reminders.filter((r) => !r.done);
     const bins = binsInfo(this.hass, c);
     // energy saving session: show today's (glowing while it's on) or the next one within two days
     const sv = this.hub.savings.find((e) => e.end > now && e.start.getTime() - now.getTime() < 2 * 86400000);
@@ -162,13 +167,17 @@ export class PanelScreensaver extends LitElement {
             ? html`<div class="pill"><ha-icon icon="mdi:calendar"></ha-icon>${dayLabel(next.start)}${next.allDay ? "" : " " + fmtTime(next.start)} · ${next.summary}</div>`
             : nothing}
           ${rem
-            .slice(0, 3)
-            .map(
-              (r) =>
-                html`<div class="pill rem ${r.start.getTime() <= now.getTime() ? "due" : ""}">
-                  <ha-icon icon="mdi:bell-outline"></ha-icon>${r.allDay ? "" : fmtTime(r.start) + " · "}${r.summary}
-                </div>`,
-            )}
+            .slice(0, 4)
+            .map((r) => {
+              const today = r.start.toDateString() === now.toDateString();
+              const when = today ? (r.allDay ? "" : fmtTime(r.start) + " · ") : dayLabel(r.start) + " · ";
+              return html`<div class="pill rem ${r.start.getTime() <= now.getTime() ? "due" : ""} ${today ? "" : "late"}">
+                <ha-icon icon="mdi:bell-outline"></ha-icon><span>${when}${r.summary}</span>
+                <button class="tick" aria-label="Mark ${r.summary} done" @pointerup=${(e: PointerEvent) => this.tick(e, r)}>
+                  <ha-icon icon="mdi:check"></ha-icon>
+                </button>
+              </div>`;
+            })}
         </div>
       </div>
     `;
@@ -380,8 +389,31 @@ export class PanelScreensaver extends LitElement {
           transform: rotate(360deg);
         }
       }
-      .pill.rem ha-icon {
+      .pill.rem {
+        pointer-events: auto;
+        padding-right: 6px;
+      }
+      .pill.rem > ha-icon {
         color: #3ddc84;
+      }
+      .pill.rem.late {
+        border-color: #ffb547;
+      }
+      .pill.rem.late > ha-icon {
+        color: #ffb547;
+      }
+      .pill.rem .tick {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        margin-left: 6px;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        background: rgba(255, 255, 255, 0.08);
+        color: #3ddc84;
+        cursor: pointer;
+        --mdc-icon-size: 22px;
       }
       .pill.rem.due {
         border-color: #3ddc84;
