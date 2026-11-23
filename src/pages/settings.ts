@@ -35,8 +35,8 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
  */
 export class PageSettings extends PageBase {
   @state() private flow?: Flow;
-  @state() private other = "";
   @state() private busy = false;
+  private restarting = false;
 
   private get vm() {
     return this.config.voice_match;
@@ -54,11 +54,18 @@ export class PageSettings extends PageBase {
     return Array.isArray(v) ? v : [];
   }
 
+  /** People who can be enrolled: Home Assistant people with a user account,
+   *  except the account this panel is logged in as (the tablet itself). */
   private people(): { name: string; label: string }[] {
-    return (this.vm?.people ?? []).map((id) => {
-      const label = String(this.hass.states[id]?.attributes.friendly_name ?? id.replace(/^person\./, "")).split(" ")[0];
-      return { name: label.toLowerCase().replace(/[^a-z0-9_-]/g, ""), label };
-    });
+    const me = (this.hass as any).user?.id;
+    return Object.values(this.hass.states)
+      .filter((s) => s.entity_id.startsWith("person.") && s.attributes.user_id && s.attributes.user_id !== me)
+      .map((s) => {
+        const label = String(s.attributes.friendly_name ?? s.entity_id.replace(/^person\./, "")).split(" ")[0];
+        return { name: label.toLowerCase().replace(/[^a-z0-9_-]/g, ""), label };
+      })
+      .filter((p) => p.name)
+      .sort((a, b) => a.label.localeCompare(b.label));
   }
 
   private label(name: string) {
@@ -95,6 +102,22 @@ export class PageSettings extends PageBase {
     }
   }
 
+  /** Throw away this session's samples and go back to the first sentence. */
+  private async restart() {
+    const f = this.flow;
+    if (f?.step !== "reading") return;
+    this.restarting = true;
+    try {
+      await this.control("enrol/cancel");
+      await this.control("enrol/start", { name: f.name, total: ENROL_SENTENCES.length, mode: f.mode });
+      this.toast("Starting again from the first sentence");
+    } catch {
+      /* toast shown */
+    } finally {
+      window.setTimeout(() => (this.restarting = false), 1500);
+    }
+  }
+
   private async cancel() {
     if (this.flow?.step === "reading") {
       try {
@@ -126,7 +149,7 @@ export class PageSettings extends PageBase {
       if (s.state === "idle" && msg.startsWith("complete")) {
         this.setAwake(false);
         this.flow = { step: "done", label: f.label };
-      } else if (s.state === "idle" && (msg === "timed out" || msg === "cancelled")) {
+      } else if (s.state === "idle" && !this.restarting && (msg === "timed out" || msg === "cancelled")) {
         this.setAwake(false);
         this.flow = undefined;
         this.toast(msg === "timed out" ? "Voice enrolment timed out" : "Voice enrolment cancelled");
@@ -166,7 +189,7 @@ export class PageSettings extends PageBase {
               )}
             </div>`
           : html`<div class="empty">No voices enrolled yet.</div>`}
-        <button class="btn primary add" @click=${() => ((this.other = ""), (this.flow = { step: "pick" }))}>
+        <button class="btn primary add" @click=${() => (this.flow = { step: "pick" })}>
           <ha-icon icon="mdi:microphone-plus"></ha-icon>Enrol a voice
         </button>
       </div>
@@ -187,20 +210,17 @@ export class PageSettings extends PageBase {
     if (f.step === "pick") {
       const enrolled = new Set(this.voices.map((v) => v.name));
       const people = this.people();
-      const otherName = this.other.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
       const start = (name: string, label: string) =>
         (this.flow = { step: "intro", name, label, mode: "replace" });
       return html`
         <div class="label"><ha-icon icon="mdi:microphone-plus"></ha-icon>Enrol a voice</div>
         <div class="ptitle">Whose voice?</div>
-        <div class="chips">
-          ${people.map((p) => html`<button class="chip" @click=${() => start(p.name, p.label)}>${p.label}${enrolled.has(p.name) ? " (re-record)" : ""}</button>`)}
-        </div>
-        <div class="sub">Someone else</div>
-        <div class="row">
-          <input class="field" placeholder="First name" .value=${this.other} @input=${(e: Event) => (this.other = (e.target as HTMLInputElement).value)} />
-          <button class="btn primary" ?disabled=${!otherName} @click=${() => start(otherName, cap(this.other.trim()))}>Next</button>
-        </div>
+        ${people.length
+          ? html`<div class="chips">
+              ${people.map((p) => html`<button class="chip" @click=${() => start(p.name, p.label)}>${p.label}${enrolled.has(p.name) ? " (re-record)" : ""}</button>`)}
+            </div>`
+          : html`<div class="empty">No Home Assistant accounts to enrol.</div>`}
+        <div class="muted hint">Only people with a Home Assistant account can be enrolled. To add someone, give them an account first (Settings → People in Home Assistant; it can have logging in turned off).</div>
         <div class="row"><span class="grow"></span><button class="btn" @click=${() => (this.flow = undefined)}>Cancel</button></div>
       `;
     }
@@ -241,7 +261,11 @@ export class PageSettings extends PageBase {
         <div class="say">Say <b>"Hey Jarvis"</b>, then read:</div>
         <div class="sentence">${ENROL_SENTENCES[Math.min(done, ENROL_SENTENCES.length - 1)]}</div>
         ${note ? html`<div class="note"><ha-icon icon="mdi:alert-circle-outline"></ha-icon>${note}</div>` : nothing}
-        <div class="row"><span class="grow"></span><button class="btn" @click=${() => this.cancel()}>Cancel</button></div>
+        <div class="row">
+          <span class="grow"></span>
+          <button class="btn" ?disabled=${this.busy || done === 0} @click=${() => this.restart()}><ha-icon icon="mdi:restart"></ha-icon>Start again</button>
+          <button class="btn" @click=${() => this.cancel()}>Cancel</button>
+        </div>
       `;
     }
     if (f.step === "done") {

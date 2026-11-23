@@ -122,7 +122,7 @@ export interface PanelConfig {
     status_sensor: string;
     /** Service that calls the voice-match control API, taking `path` and `body` (e.g. a rest_command). */
     control_service: string;
-    /** person.* entities offered for enrolment. */
+    /** Unused: people offered for enrolment are the Home Assistant people with a user account (except the panel's own). */
     people?: string[];
   };
 
