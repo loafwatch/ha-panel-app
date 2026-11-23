@@ -228,6 +228,20 @@ export class PageMusic extends PageBase {
     if (this.room) call(this.hass, "media_player", service, { entity_id: this.room.player, ...data });
   }
 
+  /** Stop this room: stops Music Assistant's player, and closes whatever app the
+   *  device itself is showing (e.g. the TV mirroring a Spotify session from elsewhere). */
+  private stopRoom() {
+    const r = this.room;
+    if (!r) return;
+    call(this.hass, "media_player", "media_stop", { entity_id: r.player });
+    const d = r.device ? this.hass?.states[r.device] : undefined;
+    if (d && !["off", "idle", "standby", "unavailable"].includes(d.state) && r.device!.split(".")[0] === "media_player") {
+      // turning a Cast device "off" just quits the app on it; harmless for speakers that don't support it
+      this.hass?.callService("media_player", "turn_off", {}, { entity_id: r.device }).catch(() => undefined);
+    }
+    this.toast(`Stopped ${r.name}`);
+  }
+
   private like() {
     const r = this.room;
     if (!r) return;
@@ -311,6 +325,7 @@ export class PageMusic extends PageBase {
           <button class="b sm ${rep !== "off" ? "on" : ""}" aria-label="Repeat"
             @click=${() => this.ctl("repeat_set", { repeat: rep === "off" ? "all" : rep === "all" ? "one" : "off" })}>
             <ha-icon icon=${rep === "one" ? "mdi:repeat-once" : "mdi:repeat"}></ha-icon></button>
+          <button class="b sm" aria-label="Stop" @click=${() => this.stopRoom()}><ha-icon icon="mdi:stop"></ha-icon></button>
         </div>
         <div class="vol">
           <ha-icon icon="mdi:volume-medium"></ha-icon>
