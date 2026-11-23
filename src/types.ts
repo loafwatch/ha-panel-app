@@ -116,6 +116,16 @@ export interface PanelConfig {
     tts?: string;
   };
 
+  /** Voice match (speaker recognition) settings: adds a Settings page with Voices. */
+  voice_match?: {
+    /** Sensor fed by voice-match with enrolment progress (state active/idle; attributes name, done, total, message, voices). */
+    status_sensor: string;
+    /** Service that calls the voice-match control API, taking `path` and `body` (e.g. a rest_command). */
+    control_service: string;
+    /** person.* entities offered for enrolment. */
+    people?: string[];
+  };
+
   photos?: { url: string };
   /** Media player whose track is shown on the screensaver while it plays. */
   now_playing?: string;
@@ -174,7 +184,7 @@ export interface PanelInfo {
   config: PanelConfig;
 }
 
-export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv" | "recipes" | "iptv";
+export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv" | "recipes" | "iptv" | "settings";
 
 export interface TvConfig {
   name?: string;

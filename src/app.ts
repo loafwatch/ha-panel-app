@@ -17,6 +17,7 @@ import "./pages/transit";
 import "./pages/tv";
 import "./pages/recipes";
 import "./pages/iptv";
+import "./pages/settings";
 import "./components/voice";
 import "./components/screensaver";
 import "./components/volume";
@@ -46,6 +47,7 @@ const PAGES: PageDef[] = [
   { id: "energy", label: "Utilities", icon: "mdi:gauge", tag: "panel-energy", needs: (c) => !!c.energy },
   { id: "transit", label: "Tram", icon: "mdi:tram", tag: "panel-transit", needs: (c) => !!c.transit?.stops?.length },
   { id: "media", label: "Media", icon: "mdi:play-box-multiple", tag: "panel-media", needs: (c) => !!c.media?.url },
+  { id: "settings", label: "Settings", icon: "mdi:cog", tag: "panel-settings", needs: (c) => !!c.voice_match },
 ];
 
 /**

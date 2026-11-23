@@ -21,7 +21,7 @@ export class PanelVoice extends LitElement {
       const v = this.config?.voice;
       if (!v) return false;
       const old = changed.get("hass") as HomeAssistant | undefined;
-      return !old || [v.satellite, v.stt, v.tts].some((id) => id && old.states[id] !== this.hass.states[id]);
+      return !old || [v.satellite, v.stt, v.tts, this.config?.voice_match?.status_sensor].some((id) => id && old.states[id] !== this.hass.states[id]);
     }
     return true;
   }
@@ -47,9 +47,15 @@ export class PanelVoice extends LitElement {
     return this.visible;
   }
 
+  /** During voice enrolment the Settings page shows the sentence to read; don't cover it. */
+  private get enrolling() {
+    const id = this.config?.voice_match?.status_sensor;
+    return !!id && this.hass.states[id]?.state === "active";
+  }
+
   render() {
     const v = this.config?.voice;
-    if (!v || !this.visible) return nothing;
+    if (!v || !this.visible || this.enrolling) return nothing;
     const s = this.hass.states[v.satellite]?.state ?? "idle";
     const heard = v.stt ? this.hass.states[v.stt]?.state : "";
     const reply = v.tts ? this.hass.states[v.tts]?.state : "";
