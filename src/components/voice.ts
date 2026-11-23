@@ -47,6 +47,27 @@ export class PanelVoice extends LitElement {
     return this.visible;
   }
 
+  /** The satellite's "interrupt" button: from config, or the View Assist Companion App
+   *  convention (assist_satellite.vaca_x -> button.vaca_x_interrupt) if that entity exists. */
+  private get interruptButton(): string | undefined {
+    const v = this.config?.voice;
+    if (!v) return undefined;
+    if (v.interrupt) return v.interrupt;
+    const guess = v.satellite.replace(/^assist_satellite\./, "button.") + "_interrupt";
+    return this.hass.states[guess] ? guess : undefined;
+  }
+
+  /** Tapping the overlay stops the assistant straight away (listening, thinking or
+   *  speaking) and closes the overlay. */
+  private tap(state: string) {
+    this.visible = false;
+    window.clearTimeout(this.hideTimer);
+    const btn = this.interruptButton;
+    if (btn && state !== "idle") {
+      this.hass.callService("button", "press", { entity_id: btn }).catch(() => {});
+    }
+  }
+
   /** During voice enrolment the Settings page shows the sentence to read; don't cover it. */
   private get enrolling() {
     const id = this.config?.voice_match?.status_sensor;
@@ -63,7 +84,7 @@ export class PanelVoice extends LitElement {
     const showHeard = s !== "listening" && ok(heard);
     const showReply = (s === "responding" || s === "idle") && ok(reply);
     return html`
-      <div class="ov s-${s}" @click=${() => (this.visible = false)}>
+      <div class="ov s-${s}" @click=${() => this.tap(s)}>
         <div class="edge soft"><i></i></div>
         <div class="edge"><i></i></div>
         <div class="bars">${[0, 1, 2, 3, 4].map((i) => html`<i style="--i:${i}"></i>`)}</div>

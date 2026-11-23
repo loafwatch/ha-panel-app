@@ -114,6 +114,9 @@ export interface PanelConfig {
     satellite: string;
     stt?: string;
     tts?: string;
+    /** Button that interrupts the assistant (tap the overlay to stop it). Defaults to the
+     *  View Assist Companion App's button.<satellite>_interrupt if present. */
+    interrupt?: string;
   };
 
   /** Voice match (speaker recognition) settings: adds a Settings page with Voices. */
