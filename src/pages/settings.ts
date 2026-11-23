@@ -229,12 +229,12 @@ export class PageSettings extends PageBase {
         <div class="label"><ha-icon icon="mdi:account-voice"></ha-icon>${f.mode === "add" ? "Improve" : "Enrol"} ${f.label}'s voice</div>
         <div class="ptitle">${ENROL_SENTENCES.length} sentences, about a minute</div>
         <ol class="howto">
-          <li>Turn the TV off. Only ${f.label} should talk.</li>
+          <li>Make sure you're in a quiet place, and only ${f.label} is talking.</li>
           <li>Stand where you'd normally talk to Jarvis.</li>
           <li>For each sentence, say <b>"Hey Jarvis"</b>, wait for it to listen, then read the sentence normally.</li>
         </ol>
         ${f.mode === "add"
-          ? html`<div class="muted hint">These samples are added to ${f.label}'s voice, which helps it cope with different days and background noise. Tip: try this one with the TV on quietly.</div>`
+          ? html`<div class="muted hint">These samples are added to ${f.label}'s voice, which helps it cope with different days and background noise. Tip: a little background noise is fine this time, as it helps Jarvis cope with a busier room.</div>`
           : this.voices.some((v) => v.name === f.name)
             ? html`<div class="muted hint">This replaces ${f.label}'s current voice once all ${ENROL_SENTENCES.length} sentences are done.</div>`
             : nothing}
