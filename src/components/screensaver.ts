@@ -18,6 +18,7 @@ export class PanelScreensaver extends LitElement {
   @property({ attribute: false }) hub!: DataHub;
   @property({ type: Boolean, reflect: true }) open = false;
   @state() private n = 0;
+  @state() private albumsOpen = false;
   @state() private now = new Date();
   private timer?: number;
   private sx = 0;
@@ -60,6 +61,37 @@ export class PanelScreensaver extends LitElement {
     e.stopPropagation();
     this.dispatchEvent(new CustomEvent("panel-wake", { detail: { page: "timers" }, bubbles: true, composed: true }));
   };
+
+  /** Corner chip showing the current photo album; tap to pick another without waking the panel. */
+  private albumPicker() {
+    const ent = this.config?.photos?.album_entity;
+    const st = ent ? this.hass?.states[ent] : undefined;
+    if (!ent || !st) return nothing;
+    const opts: string[] = (st.attributes.options as string[]) ?? [];
+    const stop = (e: Event) => e.stopPropagation();
+    const pick = (e: Event, o: string) => {
+      e.stopPropagation();
+      this.albumsOpen = false;
+      if (o !== st.state) this.hass!.callService("input_select", "select_option", { option: o }, { entity_id: ent });
+    };
+    return html`<div class="albums" @pointerdown=${stop} @pointerup=${stop} @click=${stop}>
+      ${this.albumsOpen
+        ? html`<div class="alist">
+            ${opts.map(
+              (o) => html`<button class="aopt ${o === st.state ? "on" : ""}" @pointerup=${(e: Event) => pick(e, o)}>
+                <ha-icon icon=${o === st.state ? "mdi:check" : "mdi:image-outline"}></ha-icon>${o}
+              </button>`,
+            )}
+          </div>`
+        : nothing}
+      <button class="achip" aria-label="Choose photo album" @pointerup=${(e: Event) => {
+        e.stopPropagation();
+        this.albumsOpen = !this.albumsOpen;
+      }}>
+        <ha-icon icon="mdi:image-album"></ha-icon><span>${st.state}</span><ha-icon icon=${this.albumsOpen ? "mdi:chevron-down" : "mdi:chevron-up"}></ha-icon>
+      </button>
+    </div>`;
+  }
 
   /** Immich Kiosk address, with the album chosen in Home Assistant (if set up) and a reload counter. */
   private photoUrl(p: NonNullable<PanelConfig["photos"]>) {
@@ -128,6 +160,7 @@ export class PanelScreensaver extends LitElement {
       <div class="ss">
         ${url ? html`<iframe src=${url} title="Photos" tabindex="-1"></iframe>` : html`<div class="noframe"></div>`}
         <div class="shade"></div>
+        ${this.albumPicker()}
         <div class="hit" @pointerdown=${this.down} @pointerup=${this.up}></div>
         <div class="info">
           <div class="time">${fmtTime(this.now)}</div>
@@ -400,6 +433,61 @@ export class PanelScreensaver extends LitElement {
         to {
           transform: rotate(360deg);
         }
+      }
+      .albums {
+        position: absolute;
+        right: 20px;
+        bottom: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+        pointer-events: auto;
+        z-index: 3;
+      }
+      .achip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 0;
+        background: rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(6px);
+        color: rgba(255, 255, 255, 0.75);
+        font: 13px var(--font, system-ui, sans-serif);
+        cursor: pointer;
+        --mdc-icon-size: 16px;
+      }
+      .alist {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px;
+        border-radius: 16px;
+        background: rgba(10, 8, 18, 0.82);
+        backdrop-filter: blur(10px);
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+      .aopt {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 220px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 0;
+        background: transparent;
+        color: #fff;
+        font: 16px var(--font, system-ui, sans-serif);
+        text-align: left;
+        cursor: pointer;
+        --mdc-icon-size: 20px;
+      }
+      .aopt.on {
+        background: rgba(255, 255, 255, 0.12);
+        font-weight: 600;
       }
       .pill.rem {
         pointer-events: auto;
