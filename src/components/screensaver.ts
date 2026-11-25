@@ -62,45 +62,71 @@ export class PanelScreensaver extends LitElement {
     this.dispatchEvent(new CustomEvent("panel-wake", { detail: { page: "timers" }, bubbles: true, composed: true }));
   };
 
-  /** Corner chip showing the current photo album; tap to pick another without waking the panel. */
+  private albumMap(p: NonNullable<PanelConfig["photos"]>): Record<string, string> {
+    return p.albums ?? ((p.albums_sensor ? this.hass?.states[p.albums_sensor]?.attributes.albums : undefined) as Record<string, string>) ?? {};
+  }
+
+  /** Album names currently chosen: one for an input_select, several (" | "-separated) for an input_text. */
+  private chosenAlbums(p: NonNullable<PanelConfig["photos"]>): string[] {
+    const st = p.album_entity ? this.hass?.states[p.album_entity] : undefined;
+    if (!st || ["unknown", "unavailable", ""].includes(st.state)) return [];
+    return p.album_entity!.startsWith("input_text.") ? st.state.split("|").map((x) => x.trim()).filter(Boolean) : [st.state];
+  }
+
+  /** Corner chip showing the current photo album(s); tap to pick without waking the panel. */
   private albumPicker() {
-    const ent = this.config?.photos?.album_entity;
-    const st = ent ? this.hass?.states[ent] : undefined;
-    if (!ent || !st) return nothing;
-    const opts: string[] = (st.attributes.options as string[]) ?? [];
+    const p = this.config?.photos;
+    const ent = p?.album_entity;
+    if (!p || !ent || !this.hass?.states[ent]) return nothing;
+    const multi = ent.startsWith("input_text.");
+    const chosen = this.chosenAlbums(p);
+    const opts = multi ? Object.keys(this.albumMap(p)) : ((this.hass.states[ent].attributes.options as string[]) ?? []);
     const stop = (e: Event) => e.stopPropagation();
     const pick = (e: Event, o: string) => {
       e.stopPropagation();
-      this.albumsOpen = false;
-      if (o !== st.state) this.hass!.callService("input_select", "select_option", { option: o }, { entity_id: ent });
+      if (!multi) {
+        this.albumsOpen = false;
+        if (o !== chosen[0]) this.hass!.callService("input_select", "select_option", { option: o }, { entity_id: ent });
+        return;
+      }
+      const next = chosen.includes(o) ? chosen.filter((x) => x !== o) : [...chosen, o];
+      this.hass!.callService("input_text", "set_value", { value: next.join(" | ").slice(0, 255) }, { entity_id: ent });
     };
+    const label = chosen.length === 0 ? "All photos" : chosen.length === 1 ? chosen[0] : `${chosen.length} albums`;
     return html`<div class="albums" @pointerdown=${stop} @pointerup=${stop} @click=${stop}>
       ${this.albumsOpen
         ? html`<div class="alist">
             ${opts.map(
-              (o) => html`<button class="aopt ${o === st.state ? "on" : ""}" @pointerup=${(e: Event) => pick(e, o)}>
-                <ha-icon icon=${o === st.state ? "mdi:check" : "mdi:image-outline"}></ha-icon>${o}
+              (o) => html`<button class="aopt ${chosen.includes(o) ? "on" : ""}" @pointerup=${(e: Event) => pick(e, o)}>
+                <ha-icon icon=${chosen.includes(o) ? (multi ? "mdi:checkbox-marked" : "mdi:check") : multi ? "mdi:checkbox-blank-outline" : "mdi:image-outline"}></ha-icon>${o}
               </button>`,
             )}
+            ${multi
+              ? html`<button class="aopt done" @pointerup=${(e: Event) => {
+                  e.stopPropagation();
+                  this.albumsOpen = false;
+                }}>Done</button>`
+              : nothing}
           </div>`
         : nothing}
-      <button class="achip" aria-label="Choose photo album" @pointerup=${(e: Event) => {
+      <button class="achip" aria-label="Choose photo albums" @pointerup=${(e: Event) => {
         e.stopPropagation();
         this.albumsOpen = !this.albumsOpen;
       }}>
-        <ha-icon icon="mdi:image-album"></ha-icon><span>${st.state}</span><ha-icon icon=${this.albumsOpen ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
+        <ha-icon icon="mdi:image-album"></ha-icon><span>${label}</span><ha-icon icon=${this.albumsOpen ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
       </button>
     </div>`;
   }
 
-  /** Immich Kiosk address, with the album chosen in Home Assistant (if set up) and a reload counter. */
+  /** Immich Kiosk address with the chosen album(s) (one album= each) and a reload counter. */
   private photoUrl(p: NonNullable<PanelConfig["photos"]>) {
     const u = new URL(p.url, location.href);
-    const pick = p.album_entity ? this.hass?.states[p.album_entity]?.state : undefined;
-    const map: Record<string, string> | undefined =
-      p.albums ?? (p.albums_sensor ? (this.hass?.states[p.albums_sensor]?.attributes.albums as Record<string, string>) : undefined);
-    const id = pick && map ? map[pick] : undefined;
-    if (id) u.searchParams.set("album", id);
+    const map = this.albumMap(p);
+    const ids = this.chosenAlbums(p).map((n) => map[n]).filter(Boolean);
+    if (ids.length) {
+      u.searchParams.delete("album");
+      for (const id of ids) u.searchParams.append("album", id);
+    }
     u.searchParams.set("n", String(this.n));
     return u.toString();
   }
@@ -489,6 +515,11 @@ export class PanelScreensaver extends LitElement {
         text-align: left;
         cursor: pointer;
         --mdc-icon-size: 20px;
+      }
+      .aopt.done {
+        justify-content: center;
+        font-weight: 600;
+        color: #ff8ad8;
       }
       .aopt.on {
         background: rgba(255, 255, 255, 0.12);

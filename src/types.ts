@@ -135,6 +135,7 @@ export interface PanelConfig {
    * album is passed to Immich Kiosk as `?album=`, so it can be changed without touching Docker.
    */
   /** `albums_sensor`: alternatively, an entity whose `albums` attribute is that name → ID map (e.g. filled from Immich's API). */
+  /** `album_entity` may also be an input_text holding several album names separated by " | " (multi-select). */
   photos?: { url: string; album_entity?: string; albums?: Record<string, string>; albums_sensor?: string };
   /** Media player whose track is shown on the screensaver while it plays. */
   now_playing?: string;
