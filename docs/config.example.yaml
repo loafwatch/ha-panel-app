@@ -83,6 +83,11 @@ panel_custom:
         icon: mdi:soccer
       photos:
         url: "https://photos.example.com/kiosk"
+        # optional: switch albums from Home Assistant (input_select options = album names)
+        album_entity: input_select.photo_album
+        albums:
+          Family: 00000000-0000-0000-0000-000000000001
+          Generic: 00000000-0000-0000-0000-000000000002
       media:
         url: "https://media.example.com/web/"
         title: Media

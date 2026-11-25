@@ -61,6 +61,16 @@ export class PanelScreensaver extends LitElement {
     this.dispatchEvent(new CustomEvent("panel-wake", { detail: { page: "timers" }, bubbles: true, composed: true }));
   };
 
+  /** Immich Kiosk address, with the album chosen in Home Assistant (if set up) and a reload counter. */
+  private photoUrl(p: NonNullable<PanelConfig["photos"]>) {
+    const u = new URL(p.url, location.href);
+    const pick = p.album_entity ? this.hass?.states[p.album_entity]?.state : undefined;
+    const id = pick && p.albums ? p.albums[pick] : undefined;
+    if (id) u.searchParams.set("album", id);
+    u.searchParams.set("n", String(this.n));
+    return u.toString();
+  }
+
   /** Tick a reminder off from the kiosk without waking it. */
   private tick(e: PointerEvent, r: Reminder) {
     e.stopPropagation();
@@ -111,7 +121,7 @@ export class PanelScreensaver extends LitElement {
     const tms = c.timers?.sensor ? timersOf(this.hass, c.timers.sensor).filter((t) => t.left > 0) : [];
     const np = c.now_playing ? this.hass.states[c.now_playing] : undefined;
     const playing = np?.state === "playing" && !!np.attributes.media_title;
-    const url = c.photos?.url ? c.photos.url + (c.photos.url.includes("?") ? "&" : "?") + "n=" + this.n : "";
+    const url = c.photos?.url ? this.photoUrl(c.photos) : "";
     return html`
       <div class="ss">
         ${url ? html`<iframe src=${url} title="Photos" tabindex="-1"></iframe>` : html`<div class="noframe"></div>`}
