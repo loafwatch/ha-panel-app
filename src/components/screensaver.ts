@@ -271,9 +271,14 @@ export class PanelScreensaver extends LitElement {
         background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 30%, transparent 62%, rgba(0, 0, 0, 0.55));
         pointer-events: none;
       }
+      /* middle third only: tap to wake / swipe. The left and right thirds fall through to
+         Immich Kiosk, which goes to the previous / next photo on a tap there. */
       .hit {
         position: absolute;
-        inset: 0;
+        top: 0;
+        bottom: 0;
+        left: 33.333%;
+        width: 33.334%;
         touch-action: none;
       }
       .info {
