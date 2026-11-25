@@ -65,7 +65,9 @@ export class PanelScreensaver extends LitElement {
   private photoUrl(p: NonNullable<PanelConfig["photos"]>) {
     const u = new URL(p.url, location.href);
     const pick = p.album_entity ? this.hass?.states[p.album_entity]?.state : undefined;
-    const id = pick && p.albums ? p.albums[pick] : undefined;
+    const map: Record<string, string> | undefined =
+      p.albums ?? (p.albums_sensor ? (this.hass?.states[p.albums_sensor]?.attributes.albums as Record<string, string>) : undefined);
+    const id = pick && map ? map[pick] : undefined;
     if (id) u.searchParams.set("album", id);
     u.searchParams.set("n", String(this.n));
     return u.toString();

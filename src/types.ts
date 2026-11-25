@@ -134,7 +134,8 @@ export interface PanelConfig {
    * input_select whose options are keys of `albums` (name → Immich album ID); the chosen
    * album is passed to Immich Kiosk as `?album=`, so it can be changed without touching Docker.
    */
-  photos?: { url: string; album_entity?: string; albums?: Record<string, string> };
+  /** `albums_sensor`: alternatively, an entity whose `albums` attribute is that name → ID map (e.g. filled from Immich's API). */
+  photos?: { url: string; album_entity?: string; albums?: Record<string, string>; albums_sensor?: string };
   /** Media player whose track is shown on the screensaver while it plays. */
   now_playing?: string;
   /**
