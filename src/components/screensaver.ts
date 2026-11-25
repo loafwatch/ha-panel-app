@@ -88,7 +88,7 @@ export class PanelScreensaver extends LitElement {
         e.stopPropagation();
         this.albumsOpen = !this.albumsOpen;
       }}>
-        <ha-icon icon="mdi:image-album"></ha-icon><span>${st.state}</span><ha-icon icon=${this.albumsOpen ? "mdi:chevron-down" : "mdi:chevron-up"}></ha-icon>
+        <ha-icon icon="mdi:image-album"></ha-icon><span>${st.state}</span><ha-icon icon=${this.albumsOpen ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
       </button>
     </div>`;
   }
@@ -442,9 +442,9 @@ export class PanelScreensaver extends LitElement {
       .albums {
         position: absolute;
         right: 20px;
-        bottom: 20px;
+        top: 20px;
         display: flex;
-        flex-direction: column;
+        flex-direction: column-reverse;
         align-items: flex-end;
         gap: 8px;
         pointer-events: auto;
