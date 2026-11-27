@@ -19,7 +19,7 @@ export class PageWeather extends PageBase {
     const daily = this.hub.daily.slice(0, 7);
     const hourly = this.hub.hourly.slice(0, 24);
     return html`
-      <div class="page">
+      <div class="page ${this.config.rain_map === false ? "" : "fit"}">
         <div class="top ${this.config.rain_map === false ? "" : "withmap"}">
           <div class="lcol">
           <div class="tile now">
@@ -98,6 +98,53 @@ export class PageWeather extends PageBase {
         .top {
           grid-template-columns: 1fr;
         }
+      }
+      /* with the rain map, everything fits on one screen: the map takes whatever height is left */
+      .page.fit {
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 104px;
+      }
+      .fit .top {
+        flex: 1;
+        min-height: 0;
+      }
+      .fit .now {
+        min-height: 0;
+        padding-top: 14px;
+        padding-bottom: 14px;
+        gap: 10px;
+      }
+      .fit .nowrow ha-icon {
+        --mdc-icon-size: 76px;
+      }
+      .fit .t {
+        font-size: 60px;
+      }
+      .fit .c {
+        font-size: 18px;
+        margin-top: 2px;
+      }
+      .fit .day {
+        padding: 5px 0;
+        font-size: 15px;
+      }
+      .fit .lcol {
+        min-height: 0;
+        overflow: hidden;
+      }
+      .fit .mapt {
+        min-height: 0;
+      }
+      .fit .hours {
+        flex: none;
+        padding-top: 12px;
+        padding-bottom: 10px;
+      }
+      .fit .hr {
+        flex-basis: 58px;
+        gap: 3px;
+        padding: 6px 0;
       }
       .top:not(.withmap) .lcol {
         display: contents;
