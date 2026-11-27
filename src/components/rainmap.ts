@@ -137,7 +137,7 @@ export class PanelRainmap extends LitElement {
 
   protected updated(c: PropertyValues) {
     if (c.has("active") && !this.active) this.stop();
-    if (this.active && this.size.w && this.home && Date.now() - this.loadedAt > 20 * 60 * 1000) this.load();
+    if (this.active && this.size.w && this.home && Date.now() - this.loadedAt > 60 * 60 * 1000) this.load();
     if (c.has("sel") || c.has("size") || c.has("frames")) this.draw();
   }
 
