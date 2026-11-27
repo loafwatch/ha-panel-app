@@ -6,7 +6,7 @@ import type { DataHub, Reminder } from "../data";
 import type { HomeAssistant, PanelConfig } from "../types";
 import { binsInfo } from "../pages/bins";
 import { timerLabel, timersOf } from "../pages/timers-state";
-import { WEATHER_ICON, dayLabel, fmtDay, fmtTime, weatherLabel } from "../util";
+import { WEATHER_ICON, albumMap, chosenAlbums, dayLabel, fmtDay, fmtTime, weatherLabel } from "../util";
 
 /**
  * Photo screensaver: a photo frame (e.g. Immich Kiosk) with the time, weather,
@@ -18,7 +18,6 @@ export class PanelScreensaver extends LitElement {
   @property({ attribute: false }) hub!: DataHub;
   @property({ type: Boolean, reflect: true }) open = false;
   @state() private n = 0;
-  @state() private albumsOpen = false;
   @state() private now = new Date();
   private timer?: number;
   private sx = 0;
@@ -62,70 +61,18 @@ export class PanelScreensaver extends LitElement {
     this.dispatchEvent(new CustomEvent("panel-wake", { detail: { page: "timers" }, bubbles: true, composed: true }));
   };
 
-  private albumMap(p: NonNullable<PanelConfig["photos"]>): Record<string, string> {
-    return p.albums ?? ((p.albums_sensor ? this.hass?.states[p.albums_sensor]?.attributes.albums : undefined) as Record<string, string>) ?? {};
-  }
-
-  /** Album names currently chosen: one for an input_select, several (" | "-separated) for an input_text. */
-  private chosenAlbums(p: NonNullable<PanelConfig["photos"]>): string[] {
-    const st = p.album_entity ? this.hass?.states[p.album_entity] : undefined;
-    if (!st || ["unknown", "unavailable", ""].includes(st.state)) return [];
-    return p.album_entity!.startsWith("input_text.") ? st.state.split("|").map((x) => x.trim()).filter(Boolean) : [st.state];
-  }
-
-  /** Corner chip showing the current photo album(s); tap to pick without waking the panel. */
-  private albumPicker() {
-    const p = this.config?.photos;
-    const ent = p?.album_entity;
-    if (!p || !ent || !this.hass?.states[ent]) return nothing;
-    const multi = ent.startsWith("input_text.");
-    const chosen = this.chosenAlbums(p);
-    const opts = multi ? Object.keys(this.albumMap(p)) : ((this.hass.states[ent].attributes.options as string[]) ?? []);
-    const stop = (e: Event) => e.stopPropagation();
-    const pick = (e: Event, o: string) => {
-      e.stopPropagation();
-      if (!multi) {
-        this.albumsOpen = false;
-        if (o !== chosen[0]) this.hass!.callService("input_select", "select_option", { option: o }, { entity_id: ent });
-        return;
-      }
-      const next = chosen.includes(o) ? chosen.filter((x) => x !== o) : [...chosen, o];
-      this.hass!.callService("input_text", "set_value", { value: next.join(" | ").slice(0, 255) }, { entity_id: ent });
-    };
-    const label = chosen.length === 0 ? "All photos" : chosen.length === 1 ? chosen[0] : `${chosen.length} albums`;
-    return html`<div class="albums" @pointerdown=${stop} @pointerup=${stop} @click=${stop}>
-      ${this.albumsOpen
-        ? html`<div class="alist">
-            ${opts.map(
-              (o) => html`<button class="aopt ${chosen.includes(o) ? "on" : ""}" @pointerup=${(e: Event) => pick(e, o)}>
-                <ha-icon icon=${chosen.includes(o) ? (multi ? "mdi:checkbox-marked" : "mdi:check") : multi ? "mdi:checkbox-blank-outline" : "mdi:image-outline"}></ha-icon>${o}
-              </button>`,
-            )}
-            ${multi
-              ? html`<button class="aopt done" @pointerup=${(e: Event) => {
-                  e.stopPropagation();
-                  this.albumsOpen = false;
-                }}>Done</button>`
-              : nothing}
-          </div>`
-        : nothing}
-      <button class="achip" aria-label="Choose photo albums" @pointerup=${(e: Event) => {
-        e.stopPropagation();
-        this.albumsOpen = !this.albumsOpen;
-      }}>
-        <ha-icon icon="mdi:image-album"></ha-icon><span>${label}</span><ha-icon icon=${this.albumsOpen ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
-      </button>
-    </div>`;
-  }
-
-  /** Immich Kiosk address with the chosen album(s) (one album= each) and a reload counter. */
+  /** Immich Kiosk address with the chosen album(s) (one album= each) and a reload counter.
+   *  When an album picker is configured but no album is known yet (HA restarting, nothing
+   *  ticked), returns "" so Kiosk is never loaded unfiltered (it would show the whole library). */
   private photoUrl(p: NonNullable<PanelConfig["photos"]>) {
     const u = new URL(p.url, location.href);
-    const map = this.albumMap(p);
-    const ids = this.chosenAlbums(p).map((n) => map[n]).filter(Boolean);
+    const map = albumMap(this.hass, p);
+    const ids = chosenAlbums(this.hass, p).map((n) => map[n]).filter(Boolean);
     if (ids.length) {
       u.searchParams.delete("album");
       for (const id of ids) u.searchParams.append("album", id);
+    } else if (p.album_entity && !u.searchParams.has("album")) {
+      return "";
     }
     u.searchParams.set("n", String(this.n));
     return u.toString();
@@ -186,7 +133,6 @@ export class PanelScreensaver extends LitElement {
       <div class="ss">
         ${url ? html`<iframe src=${url} title="Photos" tabindex="-1"></iframe>` : html`<div class="noframe"></div>`}
         <div class="shade"></div>
-        ${this.albumPicker()}
         <div class="hit" @pointerdown=${this.down} @pointerup=${this.up}></div>
         <div class="info">
           <div class="time">${fmtTime(this.now)}</div>
@@ -464,66 +410,6 @@ export class PanelScreensaver extends LitElement {
         to {
           transform: rotate(360deg);
         }
-      }
-      .albums {
-        position: absolute;
-        right: 20px;
-        top: 20px;
-        display: flex;
-        flex-direction: column-reverse;
-        align-items: flex-end;
-        gap: 8px;
-        pointer-events: auto;
-        z-index: 3;
-      }
-      .achip {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 8px 12px;
-        border-radius: 999px;
-        border: 0;
-        background: rgba(0, 0, 0, 0.35);
-        backdrop-filter: blur(6px);
-        color: rgba(255, 255, 255, 0.75);
-        font: 13px var(--font, system-ui, sans-serif);
-        cursor: pointer;
-        --mdc-icon-size: 16px;
-      }
-      .alist {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        padding: 8px;
-        border-radius: 16px;
-        background: rgba(10, 8, 18, 0.82);
-        backdrop-filter: blur(10px);
-        max-height: 60vh;
-        overflow-y: auto;
-      }
-      .aopt {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        min-width: 220px;
-        padding: 12px 14px;
-        border-radius: 12px;
-        border: 0;
-        background: transparent;
-        color: #fff;
-        font: 16px var(--font, system-ui, sans-serif);
-        text-align: left;
-        cursor: pointer;
-        --mdc-icon-size: 20px;
-      }
-      .aopt.done {
-        justify-content: center;
-        font-weight: 600;
-        color: #ff8ad8;
-      }
-      .aopt.on {
-        background: rgba(255, 255, 255, 0.12);
-        font-weight: 600;
       }
       .pill.rem {
         pointer-events: auto;

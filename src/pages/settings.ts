@@ -2,6 +2,7 @@ import { reg } from "../registry";
 import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
+import { albumMap, chosenAlbums } from "../util";
 
 /** Sentences read during voice enrolment: ~6 s each, varied sounds, everyday words. */
 export const ENROL_SENTENCES = [
@@ -46,7 +47,42 @@ export class PageSettings extends PageBase {
   }
 
   protected watched() {
-    return [this.vm?.status_sensor ?? ""];
+    const p = this.config.photos;
+    return [this.vm?.status_sensor ?? "", p?.album_entity ?? "", p?.albums_sensor ?? ""];
+  }
+
+  /** Photos tile: tick which Immich albums the screensaver shows. */
+  private photosTile() {
+    const p = this.config.photos;
+    const ent = p?.album_entity;
+    if (!p || !ent || !this.hass.states[ent]) return nothing;
+    const multi = ent.startsWith("input_text.");
+    const chosen = chosenAlbums(this.hass, p);
+    const opts = multi ? Object.keys(albumMap(this.hass, p)).sort((a, b) => a.localeCompare(b)) : ((this.hass.states[ent].attributes.options as string[]) ?? []);
+    const pick = (o: string) => {
+      if (!multi) {
+        if (o !== chosen[0]) this.hass.callService("input_select", "select_option", { option: o }, { entity_id: ent });
+        return;
+      }
+      const next = chosen.includes(o) ? chosen.filter((x) => x !== o) : [...chosen, o];
+      this.hass.callService("input_text", "set_value", { value: next.join(" | ").slice(0, 255) }, { entity_id: ent });
+    };
+    return html`<div class="tile">
+      <div class="label"><ha-icon icon="mdi:image-album"></ha-icon>Screensaver photos</div>
+      <div class="muted intro">
+        ${multi ? "Tick the albums to show. Photos are mixed from all ticked albums." : "Pick the album to show."}
+        ${chosen.length === 0 ? html` <b>Nothing is ticked, so no photos will show.</b>` : nothing}
+      </div>
+      ${opts.length
+        ? html`<div class="alist">
+            ${opts.map(
+              (o) => html`<button class="aopt ${chosen.includes(o) ? "on" : ""}" @click=${() => pick(o)}>
+                <ha-icon icon=${chosen.includes(o) ? (multi ? "mdi:checkbox-marked" : "mdi:radiobox-marked") : multi ? "mdi:checkbox-blank-outline" : "mdi:radiobox-blank"}></ha-icon>${o}
+              </button>`,
+            )}
+          </div>`
+        : html`<div class="empty">No albums found yet.</div>`}
+    </div>`;
   }
 
   private get voices(): Voice[] {
@@ -160,10 +196,18 @@ export class PageSettings extends PageBase {
   // ---------- render ----------
 
   render() {
-    if (!this.vm) return nothing;
+    const photos = this.photosTile();
+    if (!this.vm && photos === nothing) return nothing;
     return html`<div class="page">
       <div class="page-title">Settings</div>
-      <div class="tile">
+      ${photos}
+      ${this.vm ? this.voicesTile() : nothing}
+      ${this.sheet()}
+    </div>`;
+  }
+
+  private voicesTile() {
+    return html`<div class="tile">
         <div class="label"><ha-icon icon="mdi:account-voice"></ha-icon>Voices</div>
         <div class="muted intro">
           Jarvis can recognise who's speaking, so "remind me" goes to the right person and the TV doesn't get in the way.
@@ -192,9 +236,7 @@ export class PageSettings extends PageBase {
         <button class="btn primary add" @click=${() => (this.flow = { step: "pick" })}>
           <ha-icon icon="mdi:microphone-plus"></ha-icon>Enrol a voice
         </button>
-      </div>
-      ${this.sheet()}
-    </div>`;
+      </div>`;
   }
 
   private sheet() {
@@ -299,6 +341,34 @@ export class PageSettings extends PageBase {
         font-size: 15px;
         line-height: 1.45;
         margin-bottom: 14px;
+      }
+      .tile + .tile {
+        margin-top: 16px;
+      }
+      .alist {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 8px;
+      }
+      .aopt {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: var(--radius-sm);
+        border: 0;
+        background: var(--tile-2);
+        color: inherit;
+        font: 17px var(--font, system-ui, sans-serif);
+        text-align: left;
+        cursor: pointer;
+        --mdc-icon-size: 24px;
+      }
+      .aopt.on {
+        font-weight: 700;
+      }
+      .aopt.on ha-icon {
+        color: var(--accent);
       }
       .voices {
         display: flex;

@@ -1,4 +1,4 @@
-import type { HassEntity, HomeAssistant } from "./types";
+import type { HassEntity, HomeAssistant, PanelConfig } from "./types";
 
 export const esc = (s: unknown) => String(s ?? "");
 
@@ -145,4 +145,18 @@ export function longPress(onTap: () => void, onHold: () => void, ms = 550) {
  *  the user is watching (lyrics, live TV). Disconnected elements are ignored automatically. */
 export function keepAwake(el: HTMLElement, on: boolean) {
   el.dispatchEvent(new CustomEvent("panel-keep-awake", { detail: { on }, bubbles: true, composed: true }));
+}
+
+type Photos = NonNullable<PanelConfig["photos"]>;
+
+/** Album name -> Immich album ID, from config or the albums sensor. */
+export function albumMap(hass: HomeAssistant | undefined, p: Photos): Record<string, string> {
+  return p.albums ?? ((p.albums_sensor ? hass?.states[p.albums_sensor]?.attributes.albums : undefined) as Record<string, string>) ?? {};
+}
+
+/** Album names currently chosen: one for an input_select, several (" | "-separated) for an input_text. */
+export function chosenAlbums(hass: HomeAssistant | undefined, p: Photos): string[] {
+  const st = p.album_entity ? hass?.states[p.album_entity] : undefined;
+  if (!st || ["unknown", "unavailable", ""].includes(st.state)) return [];
+  return p.album_entity!.startsWith("input_text.") ? st.state.split("|").map((x) => x.trim()).filter(Boolean) : [st.state];
 }
