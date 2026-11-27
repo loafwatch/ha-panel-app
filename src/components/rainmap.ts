@@ -162,14 +162,26 @@ export class PanelRainmap extends LitElement {
       const lat0 = latOf(v.y0 + this.size.h + pad, MAP_Z);
       const lon0 = lonOf(v.x0 - pad, MAP_Z);
       const lon1 = lonOf(v.x0 + this.size.w + pad, MAP_Z);
-      const url =
-        "https://api.open-meteo.com/v1/forecast?" +
-        `bounding_box=${lat0.toFixed(3)},${lon0.toFixed(3)},${lat1.toFixed(3)},${lon1.toFixed(3)}` +
-        "&hourly=precipitation&models=ukmo_uk_deterministic_2km&forecast_hours=14&timeformat=unixtime&timezone=GMT";
-      const r = await fetch(url);
-      const j = await r.json();
-      const list: any[] = Array.isArray(j) ? j : [j];
-      if (!r.ok || !list[0]?.hourly) throw new Error(j?.reason ?? r.status);
+      // Open-Meteo allows up to 1000 grid points per request (~1800 points per square degree
+      // at 2 km), so split the area into latitude strips
+      const strips = Math.max(1, Math.ceil(((lat1 - lat0) * (lon1 - lon0) * 1900) / 850));
+      const step = (lat1 - lat0) / strips;
+      const parts = await Promise.all(
+        Array.from({ length: strips }, async (_, i) => {
+          const a0 = lat0 + step * i;
+          const a1 = i === strips - 1 ? lat1 : a0 + step - 0.0005;
+          const url =
+            "https://api.open-meteo.com/v1/forecast?" +
+            `bounding_box=${a0.toFixed(4)},${lon0.toFixed(4)},${a1.toFixed(4)},${lon1.toFixed(4)}` +
+            "&hourly=precipitation&models=ukmo_uk_deterministic_2km&forecast_hours=14&timeformat=unixtime&timezone=GMT";
+          const r = await fetch(url);
+          const j = await r.json();
+          if (!r.ok) throw new Error(j?.reason ?? r.status);
+          return (Array.isArray(j) ? j : [j]) as any[];
+        }),
+      );
+      const list = parts.flat();
+      if (!list[0]?.hourly) throw new Error("no forecast data");
       this.fcTimes = (list[0].hourly.time as number[]).map((t) => t * 1000);
       this.fc = list.map((p) => ({ x7: worldX(p.longitude, RAD_Z), y7: worldY(p.latitude, RAD_Z), mm: p.hourly.precipitation.map((x: number | null) => x ?? 0) }));
       this.nearest = undefined;
