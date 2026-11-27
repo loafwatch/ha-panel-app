@@ -45,6 +45,9 @@ export async function cancelTimer(hass: HomeAssistant, config: PanelConfig, id: 
     return;
   }
   const sat = config.voice?.satellite;
+  // Give the tablet a moment to settle after the timer change, or the start of the
+  // announcement gets cut off.
+  if (sat) await new Promise((r) => setTimeout(r, 2000));
   if (sat)
     hass
       .callService("assist_satellite", "announce", { entity_id: sat, message: `${timerLabel(name)} cancelled`, preannounce: false })
