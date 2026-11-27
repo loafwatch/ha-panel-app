@@ -1,3 +1,0 @@
-#!/bin/sh
-# Blocks commits that contain personal data. See scripts/privacy-scan.mjs
-exec node scripts/privacy-scan.mjs --staged

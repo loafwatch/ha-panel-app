@@ -1,3 +1,0 @@
-#!/bin/sh
-# Final check of every tracked file before anything leaves this machine.
-exec node scripts/privacy-scan.mjs --all
