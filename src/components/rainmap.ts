@@ -10,17 +10,18 @@ import { tokens } from "../styles";
  * dark map. Centred on Home Assistant's home zone; nothing location-specific lives in code.
  */
 
-/** Map zoom used for the base map; radar tiles come at RAD_Z (1/8 the resolution). */
-const MAP_Z = 10;
+/** Map zoom (base map) can be 9–11; radar tiles always come at RAD_Z and are scaled up. */
+const Z_MIN = 9;
+const Z_MAX = 11;
 const RAD_Z = 7;
-const K = 2 ** (MAP_Z - RAD_Z);
+/** Forecast frames every 15 minutes, eased between the model's hourly values. */
+const FC_STEP = 15 * 60_000;
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
 
 interface Frame {
   kind: "radar" | "fc";
   t: number; // ms
   path?: string; // radar tile path
-  h?: number; // forecast hour index
 }
 
 interface FcPoint {
@@ -87,10 +88,14 @@ export class PanelRainmap extends LitElement {
   @state() private playing = false;
   @state() private err = "";
   @state() private size = { w: 0, h: 0 };
+  @state() private z = 10;
   @query("canvas") private canvas?: HTMLCanvasElement;
 
   private ro?: ResizeObserver;
   private loadedAt = 0;
+  private radar: Frame[] = [];
+  /** forecast per zoom level (each covers that zoom's view) */
+  private fcCache = new Map<number, { at: number; pts: FcPoint[]; times: number[] }>();
   private host = "";
   private fc: FcPoint[] = [];
   private fcTimes: number[] = [];
@@ -99,6 +104,10 @@ export class PanelRainmap extends LitElement {
   private tileCache = new Map<string, Promise<ImageData | null>>();
   private timer?: number;
   private drawSeq = 0;
+
+  private get K() {
+    return 2 ** (this.z - RAD_Z);
+  }
 
   private get home() {
     const z = this.hass?.states["zone.home"]?.attributes;
@@ -110,8 +119,8 @@ export class PanelRainmap extends LitElement {
   /** Visible area in map-zoom pixels. */
   private view() {
     const h = this.home!;
-    const cx = worldX(h.lon, MAP_Z);
-    const cy = worldY(h.lat, MAP_Z);
+    const cx = worldX(h.lon, this.z);
+    const cy = worldY(h.lat, this.z);
     return { x0: cx - this.size.w / 2, y0: cy - this.size.h / 2, cx, cy };
   }
 
@@ -137,69 +146,114 @@ export class PanelRainmap extends LitElement {
 
   protected updated(c: PropertyValues) {
     if (c.has("active") && !this.active) this.stop();
-    if (this.active && this.size.w && this.home && Date.now() - this.loadedAt > 60 * 60 * 1000) this.load();
-    if (c.has("sel") || c.has("size") || c.has("frames")) this.draw();
+    if (this.active && this.size.w && this.home) {
+      if (Date.now() - this.loadedAt > 60 * 60 * 1000) this.load();
+      else if (c.has("z")) this.useZoom();
+    }
+    if (c.has("sel") || c.has("size") || c.has("frames") || c.has("z")) this.draw();
   }
 
   private async load() {
     this.loadedAt = Date.now();
+    this.fcCache.clear();
     this.err = "";
-    const h = this.home!;
-    const frames: Frame[] = [];
     // radar: the last two hours, every 10 minutes
     try {
       const j = await (await fetch("https://api.rainviewer.com/public/weather-maps.json")).json();
       this.host = j.host;
-      for (const f of j.radar?.past ?? []) frames.push({ kind: "radar", t: f.time * 1000, path: f.path });
+      this.radar = (j.radar?.past ?? []).map((f: any) => ({ kind: "radar", t: f.time * 1000, path: f.path }) as Frame);
     } catch (e) {
+      this.radar = [];
       console.warn("ha-panel-app: radar", e);
     }
-    // forecast: Met Office UKV 2 km for the area on screen (plus a margin)
-    try {
-      const v = this.view();
-      const pad = 40;
-      const lat1 = latOf(v.y0 - pad, MAP_Z);
-      const lat0 = latOf(v.y0 + this.size.h + pad, MAP_Z);
-      const lon0 = lonOf(v.x0 - pad, MAP_Z);
-      const lon1 = lonOf(v.x0 + this.size.w + pad, MAP_Z);
-      // Open-Meteo allows up to 1000 grid points per request (~1800 points per square degree
-      // at 2 km), so split the area into latitude strips
-      const strips = Math.max(1, Math.ceil(((lat1 - lat0) * (lon1 - lon0) * 1900) / 850));
-      const step = (lat1 - lat0) / strips;
-      const parts = await Promise.all(
-        Array.from({ length: strips }, async (_, i) => {
-          const a0 = lat0 + step * i;
-          const a1 = i === strips - 1 ? lat1 : a0 + step - 0.0005;
-          const url =
-            "https://api.open-meteo.com/v1/forecast?" +
-            `bounding_box=${a0.toFixed(4)},${lon0.toFixed(4)},${a1.toFixed(4)},${lon1.toFixed(4)}` +
-            "&hourly=precipitation&models=ukmo_uk_deterministic_2km&forecast_hours=14&timeformat=unixtime&timezone=GMT";
-          const r = await fetch(url);
-          const j = await r.json();
-          if (!r.ok) throw new Error(j?.reason ?? r.status);
-          return (Array.isArray(j) ? j : [j]) as any[];
-        }),
-      );
-      const list = parts.flat();
-      if (!list[0]?.hourly) throw new Error("no forecast data");
-      this.fcTimes = (list[0].hourly.time as number[]).map((t) => t * 1000);
-      this.fc = list.map((p) => ({ x7: worldX(p.longitude, RAD_Z), y7: worldY(p.latitude, RAD_Z), mm: p.hourly.precipitation.map((x: number | null) => x ?? 0) }));
-      this.nearest = undefined;
+    await this.useZoom(true);
+  }
+
+  /** Make sure the forecast for this zoom is loaded, then rebuild the timeline. */
+  private async useZoom(first = false) {
+    const z = this.z;
+    let fc = this.fcCache.get(z);
+    if (!fc) {
+      try {
+        fc = await this.fetchForecast();
+        this.fcCache.set(z, fc);
+      } catch (e) {
+        console.warn("ha-panel-app: rain forecast", e);
+      }
+    }
+    if (z !== this.z) return; // zoomed again meanwhile
+    this.fc = fc?.pts ?? [];
+    this.fcTimes = fc?.times ?? [];
+    this.nearest = undefined;
+    const frames: Frame[] = [...this.radar];
+    if (this.fcTimes.length > 1) {
+      // hourly values are totals for the hour ending at each timestamp: treat them as the
+      // rate at the middle of that hour and ease between them every 15 minutes
+      const c0 = this.fcTimes[0] - 1800_000;
+      const c1 = this.fcTimes[this.fcTimes.length - 1] - 1800_000;
       const now = Date.now();
-      // hourly totals are for the hour ending at the timestamp; show each hour that ends after now
-      this.fcTimes.forEach((t, i) => {
-        if (t > now && t <= now + 13 * 3600_000) frames.push({ kind: "fc", t, h: i });
-      });
-    } catch (e) {
-      console.warn("ha-panel-app: rain forecast", e);
+      for (let t = Math.ceil(now / FC_STEP) * FC_STEP; t <= Math.min(c1, now + 12 * 3600_000); t += FC_STEP)
+        if (t >= c0) frames.push({ kind: "fc", t });
     }
     if (!frames.length) {
       this.err = "Couldn't load the rain map";
       return;
     }
-    const lastRadar = frames.map((f) => f.kind).lastIndexOf("radar");
+    const keepT = this.frames[this.sel]?.t;
     this.frames = frames;
-    this.sel = lastRadar >= 0 ? lastRadar : 0;
+    if (first || keepT == null) {
+      const lastRadar = frames.map((f) => f.kind).lastIndexOf("radar");
+      this.sel = lastRadar >= 0 ? lastRadar : 0;
+    } else {
+      // stay on (about) the same time after zooming
+      let best = 0;
+      frames.forEach((f, i) => Math.abs(f.t - keepT) < Math.abs(frames[best].t - keepT) && (best = i));
+      this.sel = best;
+    }
+    this.draw();
+  }
+
+  /** Met Office UKV 2 km for the area on screen (plus a margin). */
+  private async fetchForecast() {
+    const v = this.view();
+    const pad = 40;
+    const z = this.z;
+    const lat1 = latOf(v.y0 - pad, z);
+    const lat0 = latOf(v.y0 + this.size.h + pad, z);
+    const lon0 = lonOf(v.x0 - pad, z);
+    const lon1 = lonOf(v.x0 + this.size.w + pad, z);
+    // Open-Meteo allows up to 1000 grid points per request (~1800 points per square degree
+    // at 2 km), so split the area into latitude strips
+    const strips = Math.max(1, Math.ceil(((lat1 - lat0) * (lon1 - lon0) * 1900) / 850));
+    const step = (lat1 - lat0) / strips;
+    const parts = await Promise.all(
+      Array.from({ length: strips }, async (_, i) => {
+        const a0 = lat0 + step * i;
+        const a1 = i === strips - 1 ? lat1 : a0 + step - 0.0005;
+        const url =
+          "https://api.open-meteo.com/v1/forecast?" +
+          `bounding_box=${a0.toFixed(4)},${lon0.toFixed(4)},${a1.toFixed(4)},${lon1.toFixed(4)}` +
+          "&hourly=precipitation&models=ukmo_uk_deterministic_2km&forecast_hours=14&timeformat=unixtime&timezone=GMT";
+        const r = await fetch(url);
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.reason ?? r.status);
+        return (Array.isArray(j) ? j : [j]) as any[];
+      }),
+    );
+    const list = parts.flat();
+    if (!list[0]?.hourly) throw new Error("no forecast data");
+    return {
+      at: Date.now(),
+      times: (list[0].hourly.time as number[]).map((t) => t * 1000),
+      pts: list.map((p) => ({ x7: worldX(p.longitude, RAD_Z), y7: worldY(p.latitude, RAD_Z), mm: p.hourly.precipitation.map((x: number | null) => x ?? 0) })),
+    };
+  }
+
+  private zoom(d: number) {
+    const z = Math.max(Z_MIN, Math.min(Z_MAX, this.z + d));
+    if (z === this.z) return;
+    this.stop();
+    this.z = z;
   }
 
   // ---------- drawing ----------
@@ -207,6 +261,7 @@ export class PanelRainmap extends LitElement {
   /** Low-res grid (radar-zoom pixels) covering the view. */
   private grid() {
     const v = this.view();
+    const K = this.K;
     const ox = Math.floor(v.x0 / K) - 1;
     const oy = Math.floor(v.y0 / K) - 1;
     const w = Math.ceil(this.size.w / K) + 3;
@@ -306,10 +361,22 @@ export class PanelRainmap extends LitElement {
     if (f.kind === "fc") {
       if (!this.nearest) this.nearest = this.buildNearest(g);
       const { idx, wt, N } = this.nearest;
+      // which two hourly values this moment sits between
+      const T = this.fcTimes;
+      let hi = 0;
+      while (hi < T.length - 2 && T[hi + 1] - 1800_000 <= f.t) hi++;
+      const ca = T[hi] - 1800_000;
+      const cb = T[hi + 1] - 1800_000;
+      const fr = Math.max(0, Math.min(1, (f.t - ca) / (cb - ca)));
       for (let i = 0; i < g.w * g.h; i++) {
         if (idx[i * N] < 0) continue;
         let mm = 0;
-        for (let j = 0; j < N; j++) if (idx[i * N + j] >= 0) mm += this.fc[idx[i * N + j]].mm[f.h!] * wt[i * N + j];
+        for (let j = 0; j < N; j++) {
+          const k = idx[i * N + j];
+          if (k < 0) continue;
+          const m = this.fc[k].mm;
+          mm += (m[hi] + (m[hi + 1] - m[hi]) * fr) * wt[i * N + j];
+        }
         const [r, gg, b, a] = ramp(mmToV(mm));
         d[i * 4] = r;
         d[i * 4 + 1] = gg;
@@ -361,7 +428,8 @@ export class PanelRainmap extends LitElement {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.filter = "blur(3px)";
+    const K = this.K;
+    ctx.filter = `blur(${Math.round(K / 3)}px)`;
     ctx.drawImage(off, g.ox * K - g.v.x0, g.oy * K - g.v.y0, g.w * K, g.h * K);
   }
 
@@ -377,7 +445,7 @@ export class PanelRainmap extends LitElement {
         return;
       }
       this.sel++;
-    }, 700);
+    }, 380);
   }
 
   private stop() {
@@ -401,8 +469,8 @@ export class PanelRainmap extends LitElement {
       for (let ty = ty0; ty <= ty1; ty++)
         for (let tx = tx0; tx <= tx1; tx++) {
           const pos = `left:${tx * 256 - v.x0}px;top:${ty * 256 - v.y0}px`;
-          tiles.push(html`<img class="t" alt="" src="${ESRI}World_Dark_Gray_Base/MapServer/tile/${MAP_Z}/${ty}/${tx}" style=${pos} />`);
-          labels.push(html`<img class="t" alt="" src="${ESRI}World_Dark_Gray_Reference/MapServer/tile/${MAP_Z}/${ty}/${tx}" style=${pos} />`);
+          tiles.push(html`<img class="t" alt="" src="${ESRI}World_Dark_Gray_Base/MapServer/tile/${this.z}/${ty}/${tx}" style=${pos} />`);
+          labels.push(html`<img class="t" alt="" src="${ESRI}World_Dark_Gray_Reference/MapServer/tile/${this.z}/${ty}/${tx}" style=${pos} />`);
         }
     }
     const f = this.frames[this.sel];
@@ -413,7 +481,7 @@ export class PanelRainmap extends LitElement {
         ? this.sel === nowR
           ? "Radar · now"
           : `Radar · ${new Date(f.t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
-        : `Forecast · ${new Date(f.t - 3600_000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}–${new Date(f.t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+        : `Forecast · ${new Date(f.t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
     const split = nowR >= 0 && this.frames.length > 1 ? ((nowR + 0.5) / (this.frames.length - 1)) * 100 : -1;
     return html`
       <div class="base">${tiles}</div>
@@ -421,6 +489,10 @@ export class PanelRainmap extends LitElement {
       <div class="base labels">${labels}</div>
       <div class="home"><i></i></div>
       <div class="legend"><span>Light</span><b></b><span>Heavy</span></div>
+      <div class="zoom">
+        <button aria-label="Zoom in" ?disabled=${this.z >= Z_MAX} @click=${() => this.zoom(1)}><ha-icon icon="mdi:plus"></ha-icon></button>
+        <button aria-label="Zoom out" ?disabled=${this.z <= Z_MIN} @click=${() => this.zoom(-1)}><ha-icon icon="mdi:minus"></ha-icon></button>
+      </div>
       <div class="bar">
         <button class="play" aria-label=${this.playing ? "Pause" : "Play"} @click=${() => this.toggle()} ?disabled=${!this.frames.length}>
           <ha-icon icon=${this.playing ? "mdi:pause" : "mdi:play"}></ha-icon>
@@ -578,6 +650,35 @@ export class PanelRainmap extends LitElement {
         border-radius: 50%;
         background: #fff;
         box-shadow: 0 0 10px var(--pk);
+      }
+      .zoom {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        flex-direction: column;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(13, 10, 22, 0.78);
+        backdrop-filter: blur(8px);
+      }
+      .zoom button {
+        display: grid;
+        place-items: center;
+        width: 46px;
+        height: 46px;
+        border: 0;
+        background: none;
+        color: #fff;
+        cursor: pointer;
+        --mdc-icon-size: 24px;
+      }
+      .zoom button + button {
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .zoom button[disabled] {
+        opacity: 0.3;
       }
       .attr {
         position: absolute;
