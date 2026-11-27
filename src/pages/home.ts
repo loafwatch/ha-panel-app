@@ -245,8 +245,10 @@ export class PageHome extends PageBase {
     const open = this.hub.reminders.filter((r) => !r.done);
     const later = this.hub.events
       .filter((e) => e.calendar === cal && e.start.getTime() > now.getTime() && !isDone(e.description))
-      .filter((e) => !open.some((r) => r.start.getTime() === e.start.getTime() && r.summary === e.summary))
-      .slice(0, Math.max(0, 4 - open.length));
+      .filter((e) => !open.some((r) => r.summary === e.summary))
+      // a repeating reminder shows once, at its next occurrence
+      .filter((e, i, all) => all.findIndex((x) => x.summary === e.summary) === i)
+      .slice(0, Math.max(0, 3 - open.length));
     return html`<div class="tile rems">
       <div class="label tap-label" @click=${() => this.navigate("calendar")}><ha-icon icon="mdi:bell-outline"></ha-icon>Reminders</div>
       ${open.map((r) => {
@@ -271,7 +273,7 @@ export class PageHome extends PageBase {
     const b = binsInfo(this.hass, this.config);
     if (!b?.next) return nothing;
     const n = b.next;
-    const rest = b.upcoming.slice(1, 4);
+    const rest = b.upcoming.slice(1, 3);
     return html`<div class="tile binst" style="--bin:${n.color ?? "var(--accent)"}">
       <div class="label"><ha-icon icon="mdi:trash-can-outline"></ha-icon>Next bin</div>
       <div class="bnext"><i></i><b>${n.name}</b><span>${dayLabel(n.date)}</span></div>
