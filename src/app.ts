@@ -389,6 +389,8 @@ export class HaPanelApp extends LitElement {
       .slot > * {
         display: block;
         height: 100%;
+        /* pages that position things absolutely (Media's iframe, Live TV) stay below the tabs */
+        position: relative;
       }
       .slot.grouped {
         display: flex;
