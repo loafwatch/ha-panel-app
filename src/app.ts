@@ -34,21 +34,50 @@ interface PageDef {
   needs: (c: PanelConfig) => boolean;
 }
 
-const PAGES: PageDef[] = [
-  { id: "home", label: "Home", icon: "mdi:home-variant", tag: "panel-home", needs: () => true },
-  { id: "music", label: "Music", icon: "mdi:music", tag: "panel-music", needs: (c) => !!c.music?.rooms?.length },
-  { id: "tv", label: "TV", icon: "mdi:remote-tv", tag: "panel-tv", needs: (c) => !!c.tv?.length },
-  { id: "iptv", label: "Live TV", icon: "mdi:television-play", tag: "panel-iptv", needs: (c) => !!c.iptv?.playlist },
-  { id: "recipes", label: "Recipes", icon: "mdi:chef-hat", tag: "panel-recipes", needs: (c) => !!c.recipes },
-  { id: "calendar", label: "Calendar", icon: "mdi:calendar-month", tag: "panel-calendar", needs: (c) => !!c.calendars?.length },
-  { id: "weather", label: "Weather", icon: "mdi:weather-partly-cloudy", tag: "panel-weather", needs: (c) => !!c.weather },
-  { id: "lights", label: "Lights", icon: "mdi:lightbulb-group", tag: "panel-lights", needs: (c) => !!c.lights?.length },
-  { id: "timers", label: "Timers", icon: "mdi:timer-outline", tag: "panel-timers", needs: (c) => !!c.timers },
-  { id: "energy", label: "Utilities", icon: "mdi:lightning-bolt", tag: "panel-energy", needs: (c) => !!c.energy },
-  { id: "transit", label: "Tram", icon: "mdi:tram", tag: "panel-transit", needs: (c) => !!c.transit?.stops?.length },
-  { id: "media", label: "Media", icon: "mdi:play-box-multiple", tag: "panel-media", needs: (c) => !!c.media?.url },
-  { id: "settings", label: "Settings", icon: "mdi:cog", tag: "panel-settings", needs: (c) => !!c.voice_match || !!c.photos?.album_entity },
+const ALL: Record<string, PageDef> = Object.fromEntries(
+  ([
+    { id: "home", label: "Home", icon: "mdi:home-variant", tag: "panel-home", needs: () => true },
+    { id: "music", label: "Music", icon: "mdi:music", tag: "panel-music", needs: (c) => !!c.music?.rooms?.length },
+    { id: "tv", label: "TV remote", icon: "mdi:remote-tv", tag: "panel-tv", needs: (c) => !!c.tv?.length },
+    { id: "iptv", label: "Live TV", icon: "mdi:television-play", tag: "panel-iptv", needs: (c) => !!c.iptv?.playlist },
+    { id: "media", label: "Media", icon: "mdi:play-box-multiple", tag: "panel-media", needs: (c) => !!c.media?.url },
+    { id: "recipes", label: "Recipes", icon: "mdi:chef-hat", tag: "panel-recipes", needs: (c) => !!c.recipes },
+    { id: "timers", label: "Timers", icon: "mdi:timer-outline", tag: "panel-timers", needs: (c) => !!c.timers },
+    { id: "calendar", label: "Calendar", icon: "mdi:calendar-month", tag: "panel-calendar", needs: (c) => !!c.calendars?.length },
+    { id: "weather", label: "Weather", icon: "mdi:weather-partly-cloudy", tag: "panel-weather", needs: (c) => !!c.weather },
+    { id: "energy", label: "Utilities", icon: "mdi:lightning-bolt", tag: "panel-energy", needs: (c) => !!c.energy },
+    { id: "transit", label: "Tram", icon: "mdi:tram", tag: "panel-transit", needs: (c) => !!c.transit?.stops?.length },
+    { id: "lights", label: "Rooms", icon: "mdi:sofa-outline", tag: "panel-lights", needs: (c) => !!c.lights?.length },
+    { id: "settings", label: "Settings", icon: "mdi:cog", tag: "panel-settings", needs: (c) => !!c.voice_match || !!c.photos?.album_entity },
+  ] as PageDef[]).map((p) => [p.id, p]),
+);
+
+/** The dock: single pages, and groups whose pages appear as tabs along the top. */
+const DOCK: DockDef[] = [
+  { id: "home", tabs: ["home"] },
+  { id: "rooms", label: "Rooms", icon: "mdi:sofa-outline", tabs: ["lights"] },
+  { id: "music", tabs: ["music"] },
+  { id: "watch", label: "Watch", icon: "mdi:television-play", tabs: ["tv", "iptv", "media"] },
+  { id: "kitchen", label: "Kitchen", icon: "mdi:silverware-fork-knife", tabs: ["recipes", "timers"] },
+  { id: "calendar", tabs: ["calendar"] },
+  { id: "info", label: "Info", icon: "mdi:information-outline", tabs: ["weather", "energy", "transit"] },
+  { id: "settings", tabs: ["settings"] },
 ];
+
+interface DockDef {
+  id: string;
+  label?: string;
+  icon?: string;
+  tabs: PageId[];
+}
+
+/** A dock entry with the pages this install actually has. */
+interface Slot {
+  id: string;
+  label: string;
+  icon: string;
+  tabs: PageDef[];
+}
 
 /**
  * Root element registered as a Home Assistant custom panel.
@@ -77,8 +106,20 @@ export class HaPanelApp extends LitElement {
   private get config(): PanelConfig {
     return this.panel?.config ?? {};
   }
-  private get pages(): PageDef[] {
-    return PAGES.filter((p) => p.needs(this.config));
+  private get pages(): Slot[] {
+    const c = this.config;
+    return DOCK.map((d) => {
+      const tabs = d.tabs.map((t) => ALL[t]).filter((p) => p && p.needs(c));
+      return { id: d.id, label: d.label ?? tabs[0]?.label ?? d.id, icon: d.icon ?? tabs[0]?.icon ?? "mdi:circle", tabs };
+    }).filter((s) => s.tabs.length);
+  }
+
+  /** Selected tab per dock group. */
+  @state() private tabSel: Record<string, string> = {};
+
+  private tabOf(s: Slot): string {
+    const t = this.tabSel[s.id];
+    return s.tabs.some((p) => p.id === t) ? t : s.tabs[0].id;
   }
 
   connectedCallback() {
@@ -129,8 +170,13 @@ export class HaPanelApp extends LitElement {
       this.saver = true;
       return;
     }
-    const i = this.pages.findIndex((p) => p.id === id);
-    if (i < 0) return;
+    const pages = this.pages;
+    let i = pages.findIndex((p) => p.id === id);
+    if (i < 0) {
+      i = pages.findIndex((p) => p.tabs.some((t) => t.id === id));
+      if (i < 0) return;
+      this.tabSel = { ...this.tabSel, [pages[i].id]: id };
+    }
     this.saver = false;
     this.index = i;
     const el = this.pager;
@@ -193,6 +239,11 @@ export class HaPanelApp extends LitElement {
           this.saver = true;
           return;
         }
+        // ...and swiping on past the last page does too
+        if (page === "next" && this.index === this.pages.length - 1) {
+          this.saver = true;
+          return;
+        }
         const to = Math.max(0, Math.min(this.pages.length - 1, this.index + (page === "next" ? 1 : -1)));
         this.goTo(this.pages[to].id);
       } else this.goTo(page);
@@ -225,7 +276,8 @@ export class HaPanelApp extends LitElement {
     const voice = this.renderRoot.querySelector("panel-voice") as unknown as { open?: boolean } | null;
     const alarm = this.config.timers?.alarm_switch;
     const ringing = !!alarm && this.hass?.states[alarm]?.state === "on";
-    const watching = this.pages[this.index]?.id === "media";
+    const cur = this.pages[this.index];
+    const watching = !!cur && this.tabOf(cur) === "media";
     if (voice?.open || ringing || watching || this.awake.size) return this.resetIdle();
     this.saver = true;
   }
@@ -260,9 +312,22 @@ export class HaPanelApp extends LitElement {
     return html`
       <div class="pager" @scroll=${this.onScroll}>
         ${pages.map((p, i) => {
-          const tag = unsafeStatic(p.tag);
-          return html`<section class="slot" aria-label=${p.label}>
-            <${tag} .hass=${this.hass} .config=${this.config} .hub=${this.hub} ?active=${i === this.index && !this.saver} ?dark=${this.dark}></${tag}>
+          const sel = this.tabOf(p);
+          const live = i === this.index && !this.saver;
+          return html`<section class="slot ${p.tabs.length > 1 ? "grouped" : ""}" aria-label=${p.label}>
+            ${p.tabs.length > 1
+              ? html`<div class="tabs" role="tablist">
+                  ${p.tabs.map(
+                    (t) => html`<button role="tab" class="tab ${t.id === sel ? "on" : ""}" aria-selected=${t.id === sel} @click=${() => (this.tabSel = { ...this.tabSel, [p.id]: t.id })}>
+                      <ha-icon icon=${t.icon}></ha-icon>${t.label}
+                    </button>`,
+                  )}
+                </div>`
+              : nothing}
+            ${p.tabs.map((t) => {
+              const tag = unsafeStatic(t.tag);
+              return html`<${tag} class=${t.id === sel ? "" : "hidden"} .hass=${this.hass} .config=${this.config} .hub=${this.hub} ?active=${live && t.id === sel} ?dark=${this.dark}></${tag}>`;
+            })}
           </section>`;
         })}
       </div>
@@ -324,6 +389,45 @@ export class HaPanelApp extends LitElement {
       .slot > * {
         display: block;
         height: 100%;
+      }
+      .slot.grouped {
+        display: flex;
+        flex-direction: column;
+      }
+      .slot.grouped > :not(.tabs) {
+        flex: 1;
+        min-height: 0;
+        height: auto;
+      }
+      .slot > .hidden {
+        display: none !important;
+      }
+      .tabs {
+        flex: none;
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        padding: 14px 16px 0;
+        height: auto !important;
+      }
+      .tab {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--tile);
+        color: var(--text-2);
+        font: 600 16px var(--font);
+        --mdc-icon-size: 22px;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .tab.on {
+        background: var(--grad);
+        border-color: transparent;
+        color: #fff;
       }
       .dock {
         position: absolute;

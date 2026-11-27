@@ -48,6 +48,9 @@ export interface LightRoomConfig {
   /** Individual lights shown on the Lights page. */
   members?: string[];
   scenes?: NamedEntity[];
+  /** Rooms page: name of the music room (music.rooms) and TV (tv) in this room. Default: same name as the room. */
+  music?: string;
+  tv?: string;
 }
 
 export interface PanelConfig {

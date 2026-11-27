@@ -3,13 +3,77 @@ import { css, html, nothing } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
 import { call, isOn } from "../util";
-import type { HassEntity } from "../types";
+import type { HassEntity, LightRoomConfig } from "../types";
 
 export class PageLights extends PageBase {
   @state() private sel = 0;
 
   protected watched() {
-    return (this.config.lights ?? []).flatMap((r) => [r.entity, ...(r.members ?? [])]);
+    return (this.config.lights ?? []).flatMap((r) => {
+      const m = this.musicOf(r);
+      const t = this.tvOf(r);
+      return [r.entity, ...(r.members ?? []), m?.player ?? "", t?.media_player ?? "", t?.remote ?? ""];
+    });
+  }
+
+  /** The music room and TV that belong to a room: named explicitly, or with the same name. */
+  private musicOf(r: LightRoomConfig) {
+    const want = (r.music ?? r.name).toLowerCase();
+    return this.config.music?.rooms.find((m) => m.name.toLowerCase() === want);
+  }
+  private tvOf(r: LightRoomConfig) {
+    const want = (r.tv ?? r.name).toLowerCase();
+    return this.config.tv?.find((t) => (t.name ?? "").toLowerCase() === want);
+  }
+
+  /** Speaker and TV for the room, under its lights. Nothing is ever played from here. */
+  private extras(r: LightRoomConfig) {
+    const m = this.musicOf(r);
+    const t = this.tvOf(r);
+    const mp = m ? this.st(m.player) : undefined;
+    const tvp = t?.media_player ? this.st(t.media_player) : t ? this.st(t.remote) : undefined;
+    const busy = mp && (mp.state === "playing" || mp.state === "paused");
+    const vol = Math.round(((mp?.attributes.volume_level as number) ?? 0) * 100);
+    const tvOn = !!tvp && !["off", "unavailable", "standby", "unknown"].includes(tvp.state);
+    return html`
+      ${m
+        ? html`<div class="cl sc">Speaker</div>
+            <div class="xrow">
+              <ha-icon icon=${busy ? "mdi:speaker-play" : "mdi:speaker"}></ha-icon>
+              <div class="xt">
+                ${busy
+                  ? html`<b>${mp!.attributes.media_title ?? "Playing"}</b><span>${mp!.state === "paused" ? "Paused" : mp!.attributes.media_artist ?? ""}</span>`
+                  : html`<b>${mp ? "Nothing playing" : "Unavailable"}</b>`}
+              </div>
+              ${busy
+                ? html`<button class="btn icon" aria-label=${mp!.state === "playing" ? "Pause" : "Play"} @click=${() => call(this.hass, "media_player", "media_play_pause", { entity_id: m.player })}>
+                      <ha-icon icon=${mp!.state === "playing" ? "mdi:pause" : "mdi:play"}></ha-icon></button>
+                    <button class="btn icon" aria-label="Stop" @click=${() => call(this.hass, "media_player", "media_stop", { entity_id: m.player })}><ha-icon icon="mdi:stop"></ha-icon></button>`
+                : nothing}
+              <button class="btn" @click=${() => this.navigate("music")}><ha-icon icon="mdi:music"></ha-icon>Music</button>
+            </div>
+            ${busy
+              ? html`<div class="ctl">
+                  <div class="cl">Volume <b>${vol}%</b></div>
+                  <input type="range" min="0" max="100" .value=${String(vol)} style="--v:${vol}%"
+                    @input=${(ev: Event) => setV(ev)}
+                    @change=${(ev: Event) => call(this.hass, "media_player", "volume_set", { entity_id: m.player, volume_level: Number((ev.target as HTMLInputElement).value) / 100 })} />
+                </div>`
+              : nothing}`
+        : nothing}
+      ${t
+        ? html`<div class="cl sc">TV</div>
+            <div class="xrow">
+              <ha-icon icon=${tvOn ? "mdi:television" : "mdi:television-off"}></ha-icon>
+              <div class="xt">
+                <b>${!tvp ? "Unavailable" : tvOn ? tvp.attributes.app_name ?? tvp.attributes.media_title ?? "On" : "Off"}</b>
+              </div>
+              <button class="btn" @click=${() => call(this.hass, "remote", tvOn ? "turn_off" : "turn_on", { entity_id: t.remote })}>
+                <ha-icon icon="mdi:power"></ha-icon>${tvOn ? "Turn off" : "Turn on"}</button>
+              <button class="btn" @click=${() => this.navigate("tv")}><ha-icon icon="mdi:remote-tv"></ha-icon>Remote</button>
+            </div>`
+        : nothing}
+    `;
   }
 
   private pct(e?: HassEntity) {
@@ -99,6 +163,7 @@ export class PageLights extends PageBase {
                     })}
                   </div>`
               : nothing}
+            ${this.extras(r)}
           </div>
         </div>
       </div>
@@ -213,6 +278,37 @@ export class PageLights extends PageBase {
       }
       input.warm {
         background: linear-gradient(90deg, #ffb35c, #fff3e0, #cfe6ff);
+      }
+      .xrow .btn.icon {
+        padding: 10px;
+      }
+      .xrow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: var(--radius-sm);
+        background: var(--tile-2);
+        --mdc-icon-size: 28px;
+      }
+      .xrow > ha-icon {
+        color: var(--accent);
+      }
+      .xt {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .xt b,
+      .xt span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .xt span {
+        color: var(--text-2);
+        font-size: 14px;
       }
       .scenes {
         display: flex;
