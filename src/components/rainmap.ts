@@ -329,7 +329,7 @@ export class PanelRainmap extends LitElement {
                 bd[j] = d;
                 bi[j] = i;
               }
-          if (bi[0] < 0 || bd[0] > 16) continue; // outside the model area
+          if (bi[0] < 0 || bd[0] > 30) continue; // outside the model area
           let sum = 0;
           const o = (y * g.w + x) * N;
           for (let j = 0; j < N; j++) {
