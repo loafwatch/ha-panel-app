@@ -30,6 +30,8 @@ const RANGES: { id: Range; label: string }[] = [
 
 export class PageEnergy extends PageBase {
   @state() private range: Range = "week";
+  /** Day view: how many months back from the current month. */
+  @state() private monthOff = 0;
   @state() private kind: Kind = "electricity";
   @state() private bars: Bar[] = [];
   @state() private sel?: number;
@@ -75,34 +77,41 @@ export class PageEnergy extends PageBase {
     this.requestUpdate();
   }
 
-  private slots(): { start: Date; starts: number[]; period: "hour" | "day" | "month" } {
+  private slots(): { start: Date; end?: Date; starts: number[]; period: "day" | "month" } {
     const now = new Date();
     const mid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const days = (n: number) => {
-      const out: number[] = [];
-      for (let i = n - 1; i >= 0; i--) out.push(new Date(mid.getFullYear(), mid.getMonth(), mid.getDate() - i).getTime());
-      return out;
-    };
     switch (this.range) {
       case "day": {
+        // every day of one calendar month (the current one, or monthOff months back)
+        const m0 = new Date(now.getFullYear(), now.getMonth() - this.monthOff, 1);
+        const m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1);
         const out: number[] = [];
-        for (let h = 0; h < 24; h++) out.push(new Date(mid.getFullYear(), mid.getMonth(), mid.getDate(), h).getTime());
-        return { start: mid, starts: out, period: "hour" };
+        for (let d = new Date(m0); d < m1; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) out.push(d.getTime());
+        return { start: m0, end: m1, starts: out, period: "day" };
       }
-      case "week":
-        return { start: new Date(days(7)[0]), starts: days(7), period: "day" };
-      case "month":
-        return { start: new Date(days(30)[0]), starts: days(30), period: "day" };
-      case "year": {
+      case "week": {
+        // the last 12 weeks, each starting on a Monday
+        const mon = new Date(mid.getFullYear(), mid.getMonth(), mid.getDate() - ((mid.getDay() + 6) % 7));
+        const out: number[] = [];
+        for (let i = 11; i >= 0; i--) out.push(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() - 7 * i).getTime());
+        return { start: new Date(out[0]), starts: out, period: "day" };
+      }
+      case "month": {
         const out: number[] = [];
         for (let i = 11; i >= 0; i--) out.push(new Date(now.getFullYear(), now.getMonth() - i, 1).getTime());
+        return { start: new Date(out[0]), starts: out, period: "month" };
+      }
+      case "year": {
+        // up to five calendar years; years before the first readings are dropped after loading
+        const out: number[] = [];
+        for (let i = 4; i >= 0; i--) out.push(new Date(now.getFullYear() - i, 0, 1).getTime());
         return { start: new Date(out[0]), starts: out, period: "month" };
       }
     }
   }
 
   private loadKey() {
-    return this.range + "|" + this.kind;
+    return this.range + "|" + this.kind + "|" + (this.range === "day" ? this.monthOff : 0);
   }
 
   private async load() {
@@ -111,7 +120,7 @@ export class PageEnergy extends PageBase {
     this.loadedKey = key;
     this.loadedAt = Date.now();
     if (!src) return;
-    const { start, starts, period } = this.slots();
+    const { start, end, starts, period } = this.slots();
     const devs = this.kind === "electricity" ? (this.config.energy?.devices ?? []) : [];
     const devIds = devs.map((d) => d.energy);
     const ids = [...new Set([src.energy, src.cost, ...devIds].filter(Boolean))] as string[];
@@ -119,6 +128,7 @@ export class PageEnergy extends PageBase {
       const r = await this.hass.callWS<Record<string, { start: number | string; change?: number | null }[]>>({
         type: "recorder/statistics_during_period",
         start_time: start.toISOString(),
+        ...(end ? { end_time: end.toISOString() } : {}),
         statistic_ids: ids,
         period,
         types: ["change"],
@@ -137,41 +147,50 @@ export class PageEnergy extends PageBase {
         return m;
       };
       const now = Date.now();
-      // The slot containing "now" lags by up to an hour in the hourly statistics, so top it up
-      // from the five-minute statistics, which are only a few minutes behind.
-      const now0 = Date.now();
+      // Long-term statistics lag "now" by up to an hour. Work out today's shortfall from the
+      // five-minute statistics and add it to whichever slot contains today.
       let cur = -1;
-      for (let i = 0; i < starts.length; i++) if (starts[i] <= now0) cur = i;
-      if (cur >= 0) {
+      for (let i = 0; i < starts.length; i++) if (starts[i] <= now) cur = i;
+      const extra: Record<string, number> = {};
+      if (cur >= 0 && (!end || now < end.getTime())) {
+        const d0 = new Date();
+        d0.setHours(0, 0, 0, 0);
         try {
-          const r5 = await this.hass.callWS<Record<string, { start: number | string; change?: number | null }[]>>({
-            type: "recorder/statistics_during_period",
-            start_time: new Date(starts[cur]).toISOString(),
-            statistic_ids: ids,
-            period: "5minute",
-            types: ["change"],
-          });
-          for (const id of ids) {
-            const rows = r5[id];
-            if (!rows?.length) continue;
-            const sum = rows.reduce((acc, row) => acc + (row.change ?? 0), 0);
-            // keep whichever is larger: hourly stats can be partially compiled for this slot
-            const prev = r[id]?.filter((row) => (typeof row.start === "number" ? row.start : Date.parse(row.start)) >= starts[cur] - 60_000) ?? [];
-            const hourly = prev.reduce((acc, row) => acc + (row.change ?? 0), 0);
-            r[id] = [...(r[id] ?? []).filter((row) => !prev.includes(row)), { start: starts[cur], change: Math.max(sum, hourly) }];
-          }
+          const q = (p: "hour" | "5minute") =>
+            this.hass.callWS<Record<string, { change?: number | null }[]>>({
+              type: "recorder/statistics_during_period",
+              start_time: d0.toISOString(),
+              statistic_ids: ids,
+              period: p,
+              types: ["change"],
+            });
+          const [rh, r5] = await Promise.all([q("hour"), q("5minute")]);
+          const sum = (rows?: { change?: number | null }[]) => (rows ?? []).reduce((acc, row) => acc + (row.change ?? 0), 0);
+          for (const id of ids) extra[id] = Math.max(0, sum(r5[id]) - sum(rh[id]));
         } catch (e) {
           console.warn("ha-panel-app: 5-minute statistics", e);
         }
       }
-      const kwh = pick(src.energy);
-      const cost = src.cost ? pick(src.cost) : undefined;
-      const partMaps = devIds.map((id) => (id ? pick(id) : undefined));
-      this.bars = starts.map((t, i) => {
+      const pick0 = pick;
+      const pickT = (id?: string) => {
+        const m = pick0(id);
+        if (id && cur >= 0 && extra[id]) m.set(cur, (m.get(cur) ?? 0) + extra[id]);
+        return m;
+      };
+      const kwh = pickT(src.energy);
+      const cost = src.cost ? pickT(src.cost) : undefined;
+      const partMaps = devIds.map((id) => (id ? pickT(id) : undefined));
+      let bars: Bar[] = starts.map((t, i) => {
         const parts = partMaps.map((m) => Math.max(0, m?.get(i) ?? 0));
         const hi = this.dev != null && partMaps[this.dev] ? parts[this.dev] : undefined;
         return { t, kwh: Math.max(0, kwh.get(i) ?? 0), hi, parts: partMaps.length ? parts : undefined, cost: cost?.get(i), future: t > now };
       });
+      if (this.range === "year") {
+        // start from the first year with readings
+        const first = bars.findIndex((b) => b.kwh > 0);
+        bars = first > 0 ? bars.slice(first) : bars.slice(-1);
+      }
+      this.bars = bars;
       this.sel = undefined;
     } catch (e) {
       console.warn("ha-panel-app: energy statistics", e);
@@ -217,8 +236,6 @@ export class PageEnergy extends PageBase {
                     @click=${() => {
                       this.kind = k;
                       if (k !== "electricity") this.dev = undefined;
-                      // water readings are daily, so there's no hourly "Day" view
-                      if (k === "water" && this.range === "day") this.range = "week";
                     }}
                   >
                     <ha-icon icon=${KIND_ICON[k]}></ha-icon>${KIND_LABEL[k]}
@@ -226,8 +243,14 @@ export class PageEnergy extends PageBase {
                 )}
             </div>
             <div class="seg">
-              ${RANGES.filter((r) => !(this.kind === "water" && r.id === "day")).map(
-                (r) => html`<button class="chip ${this.range === r.id ? "on" : ""}" @click=${() => (this.range = r.id)}>${r.label}</button>`,
+              ${RANGES.map(
+                (r) => html`<button
+                  class="chip ${this.range === r.id ? "on" : ""}"
+                  @click=${() => {
+                    if (r.id === "day" && this.range !== "day") this.monthOff = 0;
+                    this.range = r.id;
+                  }}
+                >${r.label}</button>`,
               )}
             </div>
           </div>
@@ -253,7 +276,7 @@ export class PageEnergy extends PageBase {
     // average over complete slots only (the current hour/day/month is still filling up)
     const withData = past.slice(0, -1).filter((b) => b.kwh > 0);
     const avg = withData.length ? withData.reduce((s, b) => s + b.kwh, 0) / withData.length : 0;
-    const unitWord = this.range === "day" ? "an hour" : this.range === "year" ? "a month" : "a day";
+    const unitWord = { day: "a day", week: "a week", month: "a month", year: "a year" }[this.range];
     const dev = this.dev != null ? this.config.energy?.devices?.[this.dev] : undefined;
     const hiOf = (b: Bar) => (this.dev != null ? b.parts?.[this.dev] : undefined);
     const hiOn = !!dev && this.kind === "electricity" && bars.some((b) => hiOf(b) != null);
@@ -261,12 +284,18 @@ export class PageEnergy extends PageBase {
     const share = hiOn && total > 0 ? Math.round((hiTotal / total) * 100) : undefined;
     return html`
       <div class="sum">
+        ${this.range === "day"
+          ? html`<div class="mnav">
+              <button class="x" aria-label="Previous month" @click=${() => this.monthOff++}><ha-icon icon="mdi:chevron-left"></ha-icon></button>
+              <button class="x" aria-label="Next month" ?disabled=${this.monthOff === 0} @click=${() => (this.monthOff = Math.max(0, this.monthOff - 1))}><ha-icon icon="mdi:chevron-right"></ha-icon></button>
+            </div>`
+          : nothing}
         <div class="sumtxt">
         ${sel
           ? html`<div class="big">${this.amt(sel.kwh)}${sel.cost != null ? html`<span class="cost">£${sel.cost.toFixed(2)}</span>` : nothing}${hiOn && hiOf(sel) != null ? html`<span class="hi">${dev!.name} ${this.amt(hiOf(sel)!)}${sel.kwh > 0 ? ` · ${Math.round((hiOf(sel)! / sel.kwh) * 100)}%` : ""}</span>` : nothing}</div>
               <div class="muted">${this.slotLabel(sel.t, true)}</div>`
           : html`<div class="big">${this.amt(total)}${hasCost ? html`<span class="cost">£${totalCost.toFixed(2)}</span>` : nothing}${hiOn ? html`<span class="hi">${dev!.name} ${this.amt(hiTotal)} · ${share ?? 0}%</span>` : nothing}</div>
-              <div class="muted">${this.rangeLabel()} · average ${this.amt(avg)} ${unitWord}</div>`}
+              <div class="muted">${this.rangeLabel()}${withData.length ? ` · average ${this.amt(avg)} ${unitWord}` : ""}</div>`}
         </div>
       </div>
       <div class="bars ${this.kind} ${hiOn ? "hilite" : ""}" @click=${(e: Event) => e.target === e.currentTarget && (this.sel = undefined)}>
@@ -333,7 +362,7 @@ export class PageEnergy extends PageBase {
         }
       : undefined;
     const target = sel ?? whole;
-    const unit = this.range === "day" ? "hour" : this.range === "year" ? "month" : "day";
+    const unit = this.range;
     return html`<div class="tile bdcard">
       <div class="label bdhead">
         <ha-icon icon="mdi:chart-donut"></ha-icon>
@@ -382,38 +411,74 @@ export class PageEnergy extends PageBase {
     const d = new Date(t);
     switch (this.range) {
       case "day":
-        return i % 3 === 0 ? String(d.getHours()).padStart(2, "0") : "";
+        return i === 0 || (i + 1) % 5 === 0 ? String(d.getDate()) : "";
       case "week":
-        return d.toLocaleDateString("en-GB", { weekday: "short" });
+        return i % 2 === (this.bars.length - 1) % 2 ? d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
       case "month":
-        return i % 5 === 0 || i === 29 ? String(d.getDate()) : "";
+        return d.toLocaleDateString("en-GB", { month: "short" });
       case "year":
-        return d.toLocaleDateString("en-GB", { month: "short" }).slice(0, 1);
+        return String(d.getFullYear());
     }
   }
 
   private slotLabel(t: number, long = false) {
     const d = new Date(t);
     switch (this.range) {
-      case "day": {
-        const e = new Date(t + 3600_000);
-        const hm = (x: Date) => x.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-        return `${hm(d)}–${hm(e)}`;
-      }
-      case "year":
+      case "week":
+        return "Week commencing " + d.toLocaleDateString("en-GB", { weekday: long ? "long" : "short", day: "numeric", month: "long" });
+      case "month":
         return d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+      case "year":
+        return String(d.getFullYear()) + (d.getFullYear() === new Date().getFullYear() ? " so far" : "");
       default:
         return d.toLocaleDateString("en-GB", { weekday: long ? "long" : "short", day: "numeric", month: "long" });
     }
   }
 
   private rangeLabel() {
-    return { day: "Today", week: "Last 7 days", month: "Last 30 days", year: "Last 12 months" }[this.range];
+    switch (this.range) {
+      case "day": {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth() - this.monthOff, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+      }
+      case "week":
+        return "Last 12 weeks";
+      case "month":
+        return "Last 12 months";
+      case "year": {
+        const b = this.bars;
+        return b.length > 1 ? `${new Date(b[0].t).getFullYear()}–${new Date(b[b.length - 1].t).getFullYear()}` : "This year";
+      }
+    }
   }
 
   static styles = [
     PageBase.styles,
     css`
+      .mnav {
+        display: flex;
+        gap: 4px;
+        margin-right: 10px;
+      }
+      .sum:has(.mnav) {
+        display: flex;
+        align-items: center;
+      }
+      .mnav button {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 0;
+        background: var(--tile-2);
+        color: inherit;
+        cursor: pointer;
+        --mdc-icon-size: 26px;
+      }
+      .mnav button[disabled] {
+        opacity: 0.3;
+      }
       .page.fill {
         display: flex;
         flex-direction: column;
