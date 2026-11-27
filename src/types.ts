@@ -200,7 +200,7 @@ export interface PanelInfo {
   config: PanelConfig;
 }
 
-export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv" | "recipes" | "iptv" | "settings";
+export type PageId = "home" | "music" | "calendar" | "weather" | "lights" | "timers" | "energy" | "media" | "transit" | "tv" | "recipes" | "iptv" | "settings" | "shopping";
 
 export interface TvConfig {
   name?: string;

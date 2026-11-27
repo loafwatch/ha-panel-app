@@ -31,6 +31,16 @@ export class PageIptv extends PageBase {
   @state() private ctrls = true;
   private ctrlTimer?: number;
 
+  /** Tap the picture to show the controls, tap it again to hide them; using a control keeps them up. */
+  private tapPlayer = (e: PointerEvent) => {
+    const onCtl = e.composedPath().some((n) => n instanceof HTMLElement && (n.classList.contains("ptop") || n.classList.contains("pbot")));
+    if (onCtl || !this.ctrls) this.poke();
+    else {
+      window.clearTimeout(this.ctrlTimer);
+      this.ctrls = false;
+    }
+  };
+
   private poke = () => {
     this.ctrls = true;
     window.clearTimeout(this.ctrlTimer);
@@ -207,7 +217,7 @@ export class PageIptv extends PageBase {
                 </div>`}
       </div>
       ${this.playing
-        ? html`<div class="player ${this.ctrls ? "" : "quiet"}" @pointerdown=${this.poke} @pointermove=${this.ctrls ? this.poke : undefined}>
+        ? html`<div class="player ${this.ctrls ? "" : "quiet"}" @pointerdown=${this.tapPlayer}>
             <video playsinline autoplay></video>
             <div class="ptop">
               <div class="pn">${this.playing.name}</div>

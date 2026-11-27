@@ -18,6 +18,7 @@ import "./pages/tv";
 import "./pages/recipes";
 import "./pages/iptv";
 import "./pages/settings";
+import "./pages/shopping";
 import "./components/voice";
 import "./components/screensaver";
 import "./components/volume";
@@ -41,6 +42,7 @@ const ALL: Record<string, PageDef> = Object.fromEntries(
     { id: "tv", label: "TV remote", icon: "mdi:remote-tv", tag: "panel-tv", needs: (c) => !!c.tv?.length },
     { id: "iptv", label: "Live TV", icon: "mdi:television-play", tag: "panel-iptv", needs: (c) => !!c.iptv?.playlist },
     { id: "media", label: "Media", icon: "mdi:play-box-multiple", tag: "panel-media", needs: (c) => !!c.media?.url },
+    { id: "shopping", label: "Shopping", icon: "mdi:cart-outline", tag: "panel-shopping", needs: (c) => !!c.todo_lists?.length },
     { id: "recipes", label: "Recipes", icon: "mdi:chef-hat", tag: "panel-recipes", needs: (c) => !!c.recipes },
     { id: "timers", label: "Timers", icon: "mdi:timer-outline", tag: "panel-timers", needs: (c) => !!c.timers },
     { id: "calendar", label: "Calendar", icon: "mdi:calendar-month", tag: "panel-calendar", needs: (c) => !!c.calendars?.length },
@@ -58,7 +60,7 @@ const DOCK: DockDef[] = [
   { id: "rooms", label: "Rooms", icon: "mdi:sofa-outline", tabs: ["lights"] },
   { id: "music", tabs: ["music"] },
   { id: "watch", label: "Watch", icon: "mdi:television-play", tabs: ["tv", "iptv", "media"] },
-  { id: "kitchen", label: "Kitchen", icon: "mdi:silverware-fork-knife", tabs: ["recipes", "timers"] },
+  { id: "kitchen", label: "Kitchen", icon: "mdi:silverware-fork-knife", tabs: ["shopping", "recipes", "timers"] },
   { id: "calendar", tabs: ["calendar"] },
   { id: "info", label: "Info", icon: "mdi:information-outline", tabs: ["weather", "energy", "transit"] },
   { id: "settings", tabs: ["settings"] },

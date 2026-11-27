@@ -42,7 +42,7 @@ export class PageHome extends PageBase {
         <div class="grid">
           <div class="col">${this.clockTile(now)} ${this.upcomingTile()}</div>
           <div class="col">${this.timersTile()} ${this.lightsTile()} ${this.scenesTile()}</div>
-          <div class="col">${this.nowPlayingTile()} ${this.listsTile()} ${this.energyTile()}</div>
+          <div class="col">${this.nowPlayingTile()} ${this.remindersTile(now)} ${this.binsTile()} ${this.energyTile()}</div>
         </div>
       </div>
     `;
@@ -236,6 +236,47 @@ export class PageHome extends PageBase {
               </div>`}
       </div>
     `;
+  }
+
+  /** Family reminders: today's and missed ones to tick off, then the next few coming up. */
+  private remindersTile(now: Date) {
+    const cal = this.config.reminders?.calendar;
+    if (!cal) return nothing;
+    const open = this.hub.reminders.filter((r) => !r.done);
+    const later = this.hub.events
+      .filter((e) => e.calendar === cal && e.start.getTime() > now.getTime() && !isDone(e.description))
+      .filter((e) => !open.some((r) => r.start.getTime() === e.start.getTime() && r.summary === e.summary))
+      .slice(0, Math.max(0, 4 - open.length));
+    return html`<div class="tile rems">
+      <div class="label tap-label" @click=${() => this.navigate("calendar")}><ha-icon icon="mdi:bell-outline"></ha-icon>Reminders</div>
+      ${open.map((r) => {
+        const today = r.start.toDateString() === now.toDateString();
+        return html`<div class="rem ${today ? "" : "late"}">
+          <span class="rt"><b>${r.summary}</b><span>${today ? (r.allDay ? "Today" : "Today " + fmtTime(r.start)) : dayLabel(r.start)}</span></span>
+          <button class="tick" aria-label="Mark ${r.summary} done" @click=${() => {
+            this.hub.markReminderDone(r);
+            this.toast(`Done: ${r.summary}`);
+          }}><ha-icon icon="mdi:check"></ha-icon></button>
+        </div>`;
+      })}
+      ${later.map(
+        (e) => html`<div class="rem soon"><span class="rt"><b>${e.summary}</b><span>${dayLabel(e.start)}${e.allDay ? "" : " " + fmtTime(e.start)}</span></span></div>`,
+      )}
+      ${!open.length && !later.length ? html`<div class="empty">No reminders coming up</div>` : nothing}
+    </div>`;
+  }
+
+  /** Next bin collection, by what goes in it, in the bin's colour. */
+  private binsTile() {
+    const b = binsInfo(this.hass, this.config);
+    if (!b?.next) return nothing;
+    const n = b.next;
+    const rest = b.upcoming.slice(1, 4);
+    return html`<div class="tile binst" style="--bin:${n.color ?? "var(--accent)"}">
+      <div class="label"><ha-icon icon="mdi:trash-can-outline"></ha-icon>Next bin</div>
+      <div class="bnext"><i></i><b>${n.name}</b><span>${dayLabel(n.date)}</span></div>
+      ${rest.map((x) => html`<div class="bmore" style="--bin:${x.color ?? "var(--accent)"}"><i></i>${x.name}<span>${dayLabel(x.date)}</span></div>`)}
+    </div>`;
   }
 
   private listsTile() {
@@ -649,6 +690,86 @@ export class PageHome extends PageBase {
         background: var(--grad);
         border: none;
         color: #fff;
+      }
+      /* reminders */
+      .rem {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .rem:last-child {
+        border-bottom: 0;
+      }
+      .rt {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .rt b {
+        font-size: 15px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .rt span {
+        font-size: 13px;
+        color: var(--text-2);
+      }
+      .rem.late .rt span {
+        color: #ffb547;
+      }
+      .rem.soon b {
+        font-weight: 500;
+      }
+      .rem .tick {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 2px solid #3ddc84;
+        background: none;
+        color: #3ddc84;
+        cursor: pointer;
+        --mdc-icon-size: 20px;
+      }
+      /* bins */
+      .bnext {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 18px;
+      }
+      .bnext span,
+      .bmore span {
+        margin-left: auto;
+        color: var(--text-2);
+        font-size: 14px;
+      }
+      .bnext i,
+      .bmore i {
+        flex: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--bin);
+        box-shadow: 0 0 10px var(--bin);
+      }
+      .bmore i {
+        width: 10px;
+        height: 10px;
+        box-shadow: none;
+      }
+      .bmore {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 8px;
+        font-size: 14px;
       }
       /* lists */
       .count {
