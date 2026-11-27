@@ -95,7 +95,7 @@ export class PanelRainmap extends LitElement {
   private fc: FcPoint[] = [];
   private fcTimes: number[] = [];
   /** low-res (radar zoom) grid of nearest forecast point per pixel */
-  private nearest?: Int32Array;
+  private nearest?: { idx: Int32Array; wt: Float32Array; N: number };
   private tileCache = new Map<string, Promise<ImageData | null>>();
   private timer?: number;
   private drawSeq = 0;
@@ -214,37 +214,58 @@ export class PanelRainmap extends LitElement {
     return { ox, oy, w, h, v };
   }
 
+  /** For each low-res pixel, the four nearest forecast points and their weights (inverse
+   *  distance), so the 2 km grid is drawn as a smooth field rather than blocks. */
   private buildNearest(g: { ox: number; oy: number; w: number; h: number }) {
-    const n = new Int32Array(g.w * g.h).fill(-1);
+    const N = 4;
+    const idx = new Int32Array(g.w * g.h * N).fill(-1);
+    const wt = new Float32Array(g.w * g.h * N);
     const pts = this.fc;
-    if (!pts.length) return n;
-    // bucket the points so each pixel only checks its neighbourhood
-    const cell = 2;
-    const buckets = new Map<string, number[]>();
-    pts.forEach((p, i) => {
-      const k = `${Math.floor(p.x7 / cell)},${Math.floor(p.y7 / cell)}`;
-      (buckets.get(k) ?? buckets.set(k, []).get(k)!).push(i);
-    });
-    for (let y = 0; y < g.h; y++)
-      for (let x = 0; x < g.w; x++) {
-        const px = g.ox + x + 0.5;
-        const py = g.oy + y + 0.5;
-        const bx = Math.floor(px / cell);
-        const by = Math.floor(py / cell);
-        let best = -1;
-        let bd = 4; // ignore anything more than ~2 low-res px away (outside the model area)
-        for (let dy = -1; dy <= 1; dy++)
-          for (let dx = -1; dx <= 1; dx++)
-            for (const i of buckets.get(`${bx + dx},${by + dy}`) ?? []) {
-              const d = (pts[i].x7 - px) ** 2 + (pts[i].y7 - py) ** 2;
-              if (d < bd) {
-                bd = d;
-                best = i;
+    if (pts.length) {
+      const cell = 4;
+      const buckets = new Map<string, number[]>();
+      pts.forEach((p, i) => {
+        const k = `${Math.floor(p.x7 / cell)},${Math.floor(p.y7 / cell)}`;
+        (buckets.get(k) ?? buckets.set(k, []).get(k)!).push(i);
+      });
+      const bi = new Int32Array(N);
+      const bd = new Float32Array(N);
+      for (let y = 0; y < g.h; y++)
+        for (let x = 0; x < g.w; x++) {
+          const px = g.ox + x + 0.5;
+          const py = g.oy + y + 0.5;
+          const bx = Math.floor(px / cell);
+          const by = Math.floor(py / cell);
+          bi.fill(-1);
+          bd.fill(1e9);
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++)
+              for (const i of buckets.get(`${bx + dx},${by + dy}`) ?? []) {
+                const d = (pts[i].x7 - px) ** 2 + (pts[i].y7 - py) ** 2;
+                if (d >= bd[N - 1]) continue;
+                let j = N - 1;
+                while (j > 0 && bd[j - 1] > d) {
+                  bd[j] = bd[j - 1];
+                  bi[j] = bi[j - 1];
+                  j--;
+                }
+                bd[j] = d;
+                bi[j] = i;
               }
-            }
-        n[y * g.w + x] = best;
-      }
-    return n;
+          if (bi[0] < 0 || bd[0] > 16) continue; // outside the model area
+          let sum = 0;
+          const o = (y * g.w + x) * N;
+          for (let j = 0; j < N; j++) {
+            if (bi[j] < 0) continue;
+            const w = 1 / (bd[j] + 0.6);
+            idx[o + j] = bi[j];
+            wt[o + j] = w;
+            sum += w;
+          }
+          for (let j = 0; j < N; j++) wt[o + j] /= sum;
+        }
+    }
+    return { idx, wt, N };
   }
 
   private radarTile(path: string, x: number, y: number): Promise<ImageData | null> {
@@ -284,10 +305,12 @@ export class PanelRainmap extends LitElement {
     const d = low.data;
     if (f.kind === "fc") {
       if (!this.nearest) this.nearest = this.buildNearest(g);
-      const n = this.nearest;
-      for (let i = 0; i < n.length; i++) {
-        if (n[i] < 0) continue;
-        const [r, gg, b, a] = ramp(mmToV(this.fc[n[i]].mm[f.h!]));
+      const { idx, wt, N } = this.nearest;
+      for (let i = 0; i < g.w * g.h; i++) {
+        if (idx[i * N] < 0) continue;
+        let mm = 0;
+        for (let j = 0; j < N; j++) if (idx[i * N + j] >= 0) mm += this.fc[idx[i * N + j]].mm[f.h!] * wt[i * N + j];
+        const [r, gg, b, a] = ramp(mmToV(mm));
         d[i * 4] = r;
         d[i * 4 + 1] = gg;
         d[i * 4 + 2] = b;
@@ -559,7 +582,7 @@ export class PanelRainmap extends LitElement {
       .attr {
         position: absolute;
         right: 14px;
-        bottom: 72px;
+        top: 16px;
         color: rgba(255, 255, 255, 0.45);
         font: 10px var(--font);
         pointer-events: none;
