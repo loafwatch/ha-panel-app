@@ -283,6 +283,23 @@ export class PageMusic extends PageBase {
       <div class="art none"><ha-icon icon="mdi:music"></ha-icon></div>
       <div class="title">Nothing playing in ${r.name}</div>
       <div class="artist muted">Pick something from the list</div>
+      ${this.volRow(this.st(r.player))}
+    </div>`;
+  }
+
+  /** Volume slider for the room's speaker; works while idle too, so it can be set before playing. */
+  private volRow(p?: HassEntity) {
+    if (!p || p.state === "unavailable") return nothing;
+    const vol = Math.round((Number(p.attributes.volume_level) || 0) * 100);
+    return html`<div class="vol">
+      <ha-icon icon="mdi:volume-medium"></ha-icon>
+      <input type="range" min="0" max="100" .value=${String(vol)} style="--v:${vol}%"
+        @input=${(e: Event) => {
+          const el = e.target as HTMLInputElement;
+          el.style.setProperty("--v", el.value + "%");
+        }}
+        @change=${(e: Event) => this.ctl("volume_set", { volume_level: Number((e.target as HTMLInputElement).value) / 100 })} />
+      <span class="vp">${vol}%</span>
     </div>`;
   }
 
@@ -291,7 +308,6 @@ export class PageMusic extends PageBase {
     const dur = Number(a.media_duration) || 0;
     const pos = mediaPosition(p);
     const rep = a.repeat ?? "off";
-    const vol = Math.round((Number(a.volume_level) || 0) * 100);
     const t = this.cur ?? { title: a.media_title, artist: a.media_artist, img: a.entity_picture };
     const long = String(t.title ?? "").length > 34;
     return html`
@@ -328,15 +344,7 @@ export class PageMusic extends PageBase {
             <ha-icon icon=${rep === "one" ? "mdi:repeat-once" : "mdi:repeat"}></ha-icon></button>
           <button class="b sm" aria-label="Stop" @click=${() => this.stopRoom()}><ha-icon icon="mdi:stop"></ha-icon></button>
         </div>
-        <div class="vol">
-          <ha-icon icon="mdi:volume-medium"></ha-icon>
-          <input type="range" min="0" max="100" .value=${String(vol)} style="--v:${vol}%"
-            @input=${(e: Event) => {
-              const el = e.target as HTMLInputElement;
-              el.style.setProperty("--v", el.value + "%");
-            }}
-            @change=${(e: Event) => this.ctl("volume_set", { volume_level: Number((e.target as HTMLInputElement).value) / 100 })} />
-        </div>
+        ${this.volRow(p)}
       </div>
     `;
   }
@@ -815,6 +823,11 @@ export class PageMusic extends PageBase {
       }
       .vol input {
         flex: 1;
+      }
+      .vp {
+        min-width: 3.2em;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
       }
       .search {
         display: flex;

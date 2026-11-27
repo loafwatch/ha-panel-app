@@ -52,7 +52,7 @@ export class PageLights extends PageBase {
                 : nothing}
               <button class="btn" @click=${() => this.navigate("music")}><ha-icon icon="mdi:music"></ha-icon>Music</button>
             </div>
-            ${busy
+            ${mp && mp.state !== "unavailable"
               ? html`<div class="ctl">
                   <div class="cl">Volume <b>${vol}%</b></div>
                   <input type="range" min="0" max="100" .value=${String(vol)} style="--v:${vol}%"
