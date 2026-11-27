@@ -82,7 +82,7 @@ export const shared = css`
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 24px 28px 124px;
+    padding: var(--page-pad-top, 24px) 28px 124px;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     scrollbar-width: none;

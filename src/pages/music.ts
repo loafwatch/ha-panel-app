@@ -201,12 +201,13 @@ export class PageMusic extends PageBase {
     if (re) call(this.hass, "input_select", "select_option", { entity_id: re, option: this.rooms[i].name });
   }
 
-  private play(uri: string, name: string, shuffle: boolean) {
+  private async play(uri: string, name: string, shuffle: boolean) {
     const r = this.room;
     if (!r) return;
-    call(this.hass, "media_player", "shuffle_set", { entity_id: r.player, shuffle });
-    call(this.hass, "music_assistant", "play_media", { entity_id: r.player, media_id: uri, enqueue: "replace" });
     this.toast(`${shuffle ? "Shuffling" : "Playing"} ${name} in ${r.name}`);
+    // shuffle has to be set before the queue is replaced, or the first track is always track 1
+    await call(this.hass, "media_player", "shuffle_set", { entity_id: r.player, shuffle });
+    await call(this.hass, "music_assistant", "play_media", { entity_id: r.player, media_id: uri, enqueue: "replace" });
   }
 
   private skip(dir: 1 | -1) {
@@ -458,7 +459,7 @@ export class PageMusic extends PageBase {
             )}`
         : nothing}
       ${f.artists.length ? html`<div class="sec">Artists</div>${f.artists.slice(0, 4).map((p) => this.plRow(p))}` : nothing}
-      ${f.albums.length ? html`<div class="sec">Albums</div>${f.albums.slice(0, 5).map((p) => this.plRow(p))}` : nothing}
+      ${f.albums.length ? html`<div class="sec">Albums</div>${f.albums.slice(0, 5).map((p) => this.plRow(p, false))}` : nothing}
       ${f.playlists.length ? html`<div class="sec">Playlists</div>${f.playlists.slice(0, 5).map((p) => this.plRow(p))}` : nothing}
     `;
   }
@@ -505,15 +506,12 @@ export class PageMusic extends PageBase {
     </div>`;
   }
 
-  private plRow(p: Pl) {
-    return html`<div class="row tap" @click=${() => this.play(p.uri, p.name, false)}>
+  /** Playlists (and artists) play shuffled, so each play starts on a random song; albums play in order. */
+  private plRow(p: Pl, shuffled = true) {
+    return html`<div class="row tap" @click=${() => this.play(p.uri, p.name, shuffled)}>
       <div class="thumb" style=${p.image ? `background-image:url("${p.image}")` : ""}>${p.image ? nothing : html`<ha-icon icon="mdi:playlist-music"></ha-icon>`}</div>
       <div class="rt"><div class="rn">${p.name}</div></div>
-      <button class="rb" aria-label="Shuffle ${p.name}" @click=${(e: Event) => {
-        e.stopPropagation();
-        this.play(p.uri, p.name, true);
-      }}><ha-icon icon="mdi:shuffle-variant"></ha-icon></button>
-      <button class="rb play" aria-label="Play ${p.name}"><ha-icon icon="mdi:play"></ha-icon></button>
+      <button class="rb play" aria-label="Play ${p.name}"><ha-icon icon=${shuffled ? "mdi:shuffle-variant" : "mdi:play"}></ha-icon></button>
     </div>`;
   }
 

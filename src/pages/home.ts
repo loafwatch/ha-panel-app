@@ -199,56 +199,93 @@ export class PageHome extends PageBase {
     `;
   }
 
+  /** The kitchen speaker only: what's playing with prev / play-pause / next / stop, or, when
+   *  nothing is, the most recently played playlist ready to start (shuffled). */
   private nowPlayingTile() {
     const m = this.config.music;
     if (!m?.rooms.length) return nothing;
-    const act = activeRoom(this.hass, m.rooms, m.room_entity);
-    const p = act ? this.st(act.player) : undefined;
+    const room = m.rooms.find((r) => /kitchen/i.test(r.name)) ?? m.rooms[0];
+    const p = this.st(room.player);
+    const rs = roomState(this.hass, room);
     const a = p?.attributes ?? {};
+    const ctl = (svc: string) => call(this.hass, "media_player", svc, { entity_id: room.player });
+    if (rs === "playing" || rs === "paused") {
+      return html`
+        <div class="tile tap np" @click=${() => this.navigate("music")}>
+          <div class="npart" style=${a.entity_picture ? `background-image:url("${a.entity_picture}")` : ""}>
+            ${a.entity_picture ? nothing : html`<ha-icon icon="mdi:music"></ha-icon>`}
+          </div>
+          <div class="npinfo">
+            <div class="nptitle">${a.media_title ?? "Playing"}</div>
+            <div class="npartist muted">${a.media_artist ?? ""}</div>
+            <div class="nproom">${rs === "paused" ? "Paused" : "Playing"} · ${room.name}</div>
+            <div class="npctl" @click=${(e: Event) => e.stopPropagation()}>
+              <button class="round" aria-label="Previous" @click=${() => ctl("media_previous_track")}><ha-icon icon="mdi:skip-previous"></ha-icon></button>
+              <button class="round main" aria-label=${rs === "playing" ? "Pause" : "Play"} @click=${() => ctl("media_play_pause")}>
+                <ha-icon icon=${rs === "playing" ? "mdi:pause" : "mdi:play"}></ha-icon>
+              </button>
+              <button class="round" aria-label="Next" @click=${() => ctl("media_next_track")}><ha-icon icon="mdi:skip-next"></ha-icon></button>
+              <button class="round" aria-label="Stop" @click=${() => {
+                ctl("media_stop");
+                this.toast(`Stopped ${room.name}`);
+              }}><ha-icon icon="mdi:stop"></ha-icon></button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    this.loadSuggestion();
+    const sg = this.suggestion;
     return html`
       <div class="tile tap np" @click=${() => this.navigate("music")}>
-        ${p
-          ? html`
-              <div class="npart" style=${a.entity_picture ? `background-image:url("${a.entity_picture}")` : ""}>
-                ${a.entity_picture ? nothing : html`<ha-icon icon="mdi:music"></ha-icon>`}
-              </div>
-              <div class="npinfo">
-                <div class="nptitle">${a.media_title ?? "Playing"}</div>
-                <div class="npartist muted">${a.media_artist ?? ""}</div>
-                <div class="nproom">${p.state === "paused" ? "Paused" : "Playing"} · ${act!.name}</div>
-                <div class="npctl" @click=${(e: Event) => e.stopPropagation()}>
-                  <button class="round" @click=${() => call(this.hass, "media_player", "media_previous_track", { entity_id: act!.player })}>
-                    <ha-icon icon="mdi:skip-previous"></ha-icon>
-                  </button>
-                  <button class="round main" @click=${() => call(this.hass, "media_player", "media_play_pause", { entity_id: act!.player })}>
-                    <ha-icon icon=${p.state === "playing" ? "mdi:pause" : "mdi:play"}></ha-icon>
-                  </button>
-                  <button class="round" @click=${() => call(this.hass, "media_player", "media_next_track", { entity_id: act!.player })}>
-                    <ha-icon icon="mdi:skip-next"></ha-icon>
-                  </button>
-                </div>
-              </div>
-            `
-          : html`<div class="npart idle"><ha-icon icon="mdi:music"></ha-icon></div>
-              <div class="npinfo">
-                <div class="nptitle">Nothing playing</div>
-                <div class="npartist muted">Tap to pick some music</div>
-              </div>`}
+        <div class="npart ${sg?.image ? "" : "idle"}" style=${sg?.image ? `background-image:url("${sg.image}")` : ""}>
+          ${sg?.image ? nothing : html`<ha-icon icon="mdi:music"></ha-icon>`}
+        </div>
+        <div class="npinfo">
+          <div class="nptitle">${sg ? sg.name : "Nothing playing"}</div>
+          <div class="npartist muted">${sg ? `Play in the ${room.name.toLowerCase()}` : "Tap to pick some music"}</div>
+          ${sg
+            ? html`<div class="npctl" @click=${(e: Event) => e.stopPropagation()}>
+                <button class="round main" aria-label="Play ${sg.name}" @click=${async () => {
+                  this.toast(`Shuffling ${sg.name} in ${room.name}`);
+                  await call(this.hass, "media_player", "shuffle_set", { entity_id: room.player, shuffle: true });
+                  await call(this.hass, "music_assistant", "play_media", { entity_id: room.player, media_id: sg.uri, enqueue: "replace" });
+                }}><ha-icon icon="mdi:play"></ha-icon></button>
+              </div>`
+            : nothing}
+        </div>
       </div>
     `;
   }
 
-  /** Family reminders: today's and missed ones to tick off, then the next few coming up. */
+  @state() private suggestion?: { uri: string; name: string; image?: string };
+  private suggestedAt = 0;
+
+  /** The most recently played playlist, refreshed every 10 minutes while nothing plays. */
+  private async loadSuggestion() {
+    if (Date.now() - this.suggestedAt < 10 * 60 * 1000) return;
+    this.suggestedAt = Date.now();
+    try {
+      const ce = await this.hub.musicEntry();
+      if (!ce) return;
+      const r = await this.hub.respond<{ items: any[] }>("music_assistant", "get_library", {
+        config_entry_id: ce,
+        media_type: "playlist",
+        limit: 5,
+        order_by: "last_played_desc",
+      });
+      const p = (r?.items ?? []).find((x) => !/\(from library\)|^Infinite Mix|^All favorited tracks|^Recently (added|played) tracks/i.test(x.name));
+      this.suggestion = p ? { uri: p.uri, name: p.name, image: p.image } : undefined;
+    } catch {
+      /* keep the plain "Nothing playing" */
+    }
+  }
+
+  /** Family reminders due today, to tick off. */
   private remindersTile(now: Date) {
     const cal = this.config.reminders?.calendar;
     if (!cal) return nothing;
-    const open = this.hub.reminders.filter((r) => !r.done);
-    const later = this.hub.events
-      .filter((e) => e.calendar === cal && e.start.getTime() > now.getTime() && !isDone(e.description))
-      .filter((e) => !open.some((r) => r.summary === e.summary))
-      // a repeating reminder shows once, at its next occurrence
-      .filter((e, i, all) => all.findIndex((x) => x.summary === e.summary) === i)
-      .slice(0, Math.max(0, 3 - open.length));
+    const open = this.hub.reminders.filter((r) => !r.done && r.start.toDateString() === now.toDateString());
     return html`<div class="tile rems">
       <div class="label tap-label" @click=${() => this.navigate("calendar")}><ha-icon icon="mdi:bell-outline"></ha-icon>Reminders</div>
       ${open.map((r) => {
@@ -261,10 +298,7 @@ export class PageHome extends PageBase {
           }}><ha-icon icon="mdi:check"></ha-icon></button>
         </div>`;
       })}
-      ${later.map(
-        (e) => html`<div class="rem soon"><span class="rt"><b>${e.summary}</b><span>${dayLabel(e.start)}${e.allDay ? "" : " " + fmtTime(e.start)}</span></span></div>`,
-      )}
-      ${!open.length && !later.length ? html`<div class="empty">No reminders coming up</div>` : nothing}
+      ${!open.length ? html`<div class="empty">No reminders due today</div>` : nothing}
     </div>`;
   }
 
@@ -759,12 +793,13 @@ export class PageHome extends PageBase {
         height: 16px;
         border-radius: 50%;
         background: var(--bin);
-        box-shadow: 0 0 10px var(--bin);
+        /* a faint ring keeps a black bin visible on the dark tiles */
+        box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.35), 0 0 4px var(--bin);
       }
       .bmore i {
         width: 10px;
         height: 10px;
-        box-shadow: none;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
       }
       .bmore {
         display: flex;

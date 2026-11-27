@@ -389,6 +389,7 @@ export class PageTransit extends PageBase {
       .svg {
         width: 100%;
         height: auto;
+        max-height: 270px;
         display: block;
         margin-top: 8px;
       }

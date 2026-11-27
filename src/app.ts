@@ -402,6 +402,8 @@ export class HaPanelApp extends LitElement {
         flex: 1;
         min-height: 0;
         height: auto;
+        /* the tabs already give the page some space at the top */
+        --page-pad-top: 12px;
       }
       .slot > .hidden {
         display: none !important;
@@ -411,14 +413,14 @@ export class HaPanelApp extends LitElement {
         display: flex;
         justify-content: center;
         gap: 8px;
-        padding: 14px 16px 0;
+        padding: 10px 16px 0;
         height: auto !important;
       }
       .tab {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 10px 18px;
+        padding: 8px 18px;
         border-radius: 999px;
         border: 1px solid var(--line);
         background: var(--tile);
