@@ -65,6 +65,9 @@ export interface PanelConfig {
   /** Local calendar for reminders. Each event's description carries "For: Family" or "For: <name>";
    *  only family reminders are shown on the panel, personal ones just drive phone notifications. */
   reminders?: { calendar: string; people?: string[] };
+  /** Appliances shown as screensaver pills: "running" while the binary sensor is on, then
+   *  "finished" for an hour after the input_datetime in `finished` (tap ✓ to clear it sooner). */
+  appliance_pills?: { name: string; icon?: string; running: string; finished?: string }[];
   todo_lists?: NamedEntity[];
 
   music?: {

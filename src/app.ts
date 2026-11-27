@@ -179,6 +179,12 @@ export class HaPanelApp extends LitElement {
     if (first) return; // don't jump on load
     const page = v.split("|")[0].trim().toLowerCase();
     if (!page) return;
+    if (page === "rdone") {
+      // "rdone|<start epoch s>|<title>": a reminder ticked off from a phone notification
+      const [, ts, ...rest] = v.split("|");
+      this.hub.markReminderDoneAt(Number(ts) * 1000, rest.join("|"));
+      return;
+    }
     window.setTimeout(() => {
       if (page === "next" || page === "prev") {
         if (this.saver || Date.now() < this.holdSwipeUntil) return;

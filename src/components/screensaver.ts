@@ -78,6 +78,28 @@ export class PanelScreensaver extends LitElement {
     return u.toString();
   }
 
+  /** Appliance pills: "Tumble dryer running · 25 min", then "Tumble dryer finished 14:05" with a ✓. */
+  private appliancePills(now: Date) {
+    const list = this.config.appliance_pills ?? [];
+    return list.map((a) => {
+      const run = this.hass.states[a.running];
+      if (run?.state === "on") {
+        const mins = Math.max(0, Math.round((now.getTime() - new Date(run.last_changed).getTime()) / 60000));
+        return html`<div class="pill appl run"><ha-icon icon=${a.icon ?? "mdi:washing-machine"}></ha-icon>${a.name} running${mins >= 1 ? ` · ${mins < 60 ? mins + " min" : Math.floor(mins / 60) + " h " + String(mins % 60).padStart(2, "0") + " min"}` : ""}</div>`;
+      }
+      const fin = a.finished ? this.hass.states[a.finished] : undefined;
+      const ts = fin?.attributes.timestamp != null ? Number(fin.attributes.timestamp) * 1000 : NaN;
+      if (!fin || isNaN(ts) || now.getTime() - ts > 3600_000 || ts > now.getTime() + 60_000) return nothing;
+      return html`<div class="pill appl done">
+        <ha-icon icon=${a.icon ?? "mdi:washing-machine"}></ha-icon><span>${a.name} finished ${fmtTime(new Date(ts))}</span>
+        <button class="tick" aria-label="Clear ${a.name}" @pointerup=${(e: PointerEvent) => {
+          e.stopPropagation();
+          this.hass.callService("input_datetime", "set_datetime", { datetime: "2000-01-01 00:00:00" }, { entity_id: a.finished! });
+        }}><ha-icon icon="mdi:check"></ha-icon></button>
+      </div>`;
+    });
+  }
+
   /** Tick a reminder off from the kiosk without waking it. */
   private tick(e: PointerEvent, r: Reminder) {
     e.stopPropagation();
@@ -183,6 +205,7 @@ export class PanelScreensaver extends LitElement {
           ${next
             ? html`<div class="pill"><ha-icon icon="mdi:calendar"></ha-icon>${dayLabel(next.start)}${next.allDay ? "" : " " + fmtTime(next.start)} · ${next.summary}</div>`
             : nothing}
+          ${this.appliancePills(now)}
           ${rem
             .slice(0, 4)
             .map((r) => {
@@ -410,6 +433,32 @@ export class PanelScreensaver extends LitElement {
         to {
           transform: rotate(360deg);
         }
+      }
+      .pill.appl.run > ha-icon {
+        color: #5ec8ff;
+        animation: spin 3s linear infinite;
+      }
+      .pill.appl.done {
+        pointer-events: auto;
+        padding-right: 6px;
+        border-color: #5ec8ff;
+        box-shadow: 0 0 16px rgba(94, 200, 255, 0.4);
+      }
+      .pill.appl.done > ha-icon,
+      .pill.appl.done .tick {
+        color: #5ec8ff;
+      }
+      .pill.appl .tick {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        margin-left: 6px;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        background: rgba(255, 255, 255, 0.08);
+        cursor: pointer;
+        --mdc-icon-size: 22px;
       }
       .pill.rem {
         pointer-events: auto;

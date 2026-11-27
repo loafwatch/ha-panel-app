@@ -189,6 +189,36 @@ export class DataHub extends EventTarget {
     }
   }
 
+  /** Tick off a reminder (family or personal) identified by its start time and title,
+   *  e.g. from the "Done" button on a phone notification relayed via the page entity. */
+  async markReminderDoneAt(startMs: number, summary: string) {
+    const cal = this.config.reminders?.calendar;
+    if (!this.hass || !cal || isNaN(startMs)) return;
+    try {
+      const from = new Date(startMs - 60_000).toISOString();
+      const to = new Date(startMs + 60_000).toISOString();
+      const list: any[] = await (this.hass as any).callApi("GET", `calendars/${cal}?start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`);
+      const startOf = (e: any) => (e.start?.dateTime ? new Date(e.start.dateTime) : new Date(e.start.date + "T00:00:00")).getTime();
+      const want = summary.trim().toLowerCase();
+      const cands = list.filter((e) => Math.abs(startOf(e) - startMs) < 60_000);
+      const e = cands.find((x) => tidyTitle(x.summary ?? "").toLowerCase().startsWith(want) || (x.summary ?? "").toLowerCase().startsWith(want)) ?? (cands.length === 1 ? cands[0] : undefined);
+      if (!e || isDone(e.description)) return;
+      await this.markReminderDone({
+        summary: e.summary ?? "",
+        start: new Date(startOf(e)),
+        allDay: !e.start?.dateTime,
+        uid: e.uid,
+        recurrenceId: e.recurrence_id ?? undefined,
+        description: e.description ?? "",
+        rawStart: e.start,
+        rawEnd: e.end,
+        done: false,
+      });
+    } catch (err) {
+      console.warn("ha-panel-app: reminder done from phone", err);
+    }
+  }
+
   /** Upcoming energy saving sessions (from energy.octopus.saving_calendar), next 14 days. */
   savings: CalEvent[] = [];
 
