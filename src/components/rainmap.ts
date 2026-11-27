@@ -14,6 +14,7 @@ import { tokens } from "../styles";
 const MAP_Z = 10;
 const RAD_Z = 7;
 const K = 2 ** (MAP_Z - RAD_Z);
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
 
 interface Frame {
   kind: "radar" | "fc";
@@ -71,9 +72,8 @@ function radarV(r: number, g: number, b: number): { v: number; snow: boolean } {
     return { v: Math.max(0.08, Math.min(0.62, 0.08 + ((215 - l) / 130) * 0.54)), snow: false };
   }
   if (r > 180 && b < 90) return { v: g > 150 ? 0.72 : 0.9, snow: false };
-  // beige/tan: snow or sleet
-  const l = (r + g + b) / 3;
-  return { v: Math.max(0.15, Math.min(0.7, (230 - l) / 140)), snow: true };
+  // the faint, semi-transparent beige is the lightest drizzle / returns
+  return { v: 0, snow: true };
 }
 
 export class PanelRainmap extends LitElement {
@@ -314,7 +314,8 @@ export class PanelRainmap extends LitElement {
                   if (im.data[s + 3] < 20) continue;
                   const { v, snow } = radarV(im.data[s], im.data[s + 1], im.data[s + 2]);
                   const o = (y * g.w + x) * 4;
-                  const c = snow ? [235, 225, 255, (0.35 + v * 0.5) * 255] : ramp(v);
+                  // faint returns: a whisper of cyan that strengthens with the tile's own opacity
+                  const c = snow ? ramp(0.02 + ((im.data[s + 3] - 80) / 120) * 0.08) : ramp(v);
                   d[o] = c[0];
                   d[o + 1] = c[1];
                   d[o + 2] = c[2];
@@ -367,6 +368,7 @@ export class PanelRainmap extends LitElement {
     const h = this.home;
     if (!h) return html`<div class="msg">Set your home location in Home Assistant to see the rain map.</div>`;
     const tiles = [];
+    const labels = [];
     if (this.size.w) {
       const v = this.view();
       const tx0 = Math.floor(v.x0 / 256);
@@ -375,10 +377,9 @@ export class PanelRainmap extends LitElement {
       const ty1 = Math.floor((v.y0 + this.size.h) / 256);
       for (let ty = ty0; ty <= ty1; ty++)
         for (let tx = tx0; tx <= tx1; tx++) {
-          const s = "abcd"[(tx + ty) & 3];
-          tiles.push(
-            html`<img class="t" alt="" src="https://${s}.basemaps.cartocdn.com/dark_all/${MAP_Z}/${tx}/${ty}.png" style="left:${tx * 256 - v.x0}px;top:${ty * 256 - v.y0}px" />`,
-          );
+          const pos = `left:${tx * 256 - v.x0}px;top:${ty * 256 - v.y0}px`;
+          tiles.push(html`<img class="t" alt="" src="${ESRI}World_Dark_Gray_Base/MapServer/tile/${MAP_Z}/${ty}/${tx}" style=${pos} />`);
+          labels.push(html`<img class="t" alt="" src="${ESRI}World_Dark_Gray_Reference/MapServer/tile/${MAP_Z}/${ty}/${tx}" style=${pos} />`);
         }
     }
     const f = this.frames[this.sel];
@@ -394,6 +395,7 @@ export class PanelRainmap extends LitElement {
     return html`
       <div class="base">${tiles}</div>
       <canvas></canvas>
+      <div class="base labels">${labels}</div>
       <div class="home"><i></i></div>
       <div class="legend"><span>Light</span><b></b><span>Heavy</span></div>
       <div class="bar">
@@ -411,7 +413,7 @@ export class PanelRainmap extends LitElement {
             : nothing}
         </div>
       </div>
-      <div class="attr">© OpenStreetMap · CARTO · RainViewer · Met Office UKV via Open-Meteo</div>
+      <div class="attr">Map © Esri · Radar RainViewer · Forecast Met Office UKV via Open-Meteo</div>
     `;
   }
 
@@ -430,7 +432,11 @@ export class PanelRainmap extends LitElement {
         position: absolute;
         inset: 0;
         /* tint the dark map towards the panel's purple */
-        filter: sepia(0.6) hue-rotate(215deg) saturate(1.8) brightness(0.85) contrast(1.05);
+        filter: sepia(0.7) hue-rotate(215deg) saturate(2.2) brightness(0.8) contrast(1.15);
+      }
+      .base.labels {
+        filter: sepia(0.3) hue-rotate(215deg) saturate(1.5) brightness(1.15);
+        opacity: 0.85;
       }
       .t {
         position: absolute;
