@@ -3,6 +3,7 @@ import { css, html, nothing } from "lit";
 import { PageBase } from "./base";
 import { WEATHER_ICON, weatherLabel } from "../util";
 import "../components/weather-fx";
+import "../components/rainmap";
 
 export class PageWeather extends PageBase {
   protected usesHub = true;
@@ -19,7 +20,8 @@ export class PageWeather extends PageBase {
     const hourly = this.hub.hourly.slice(0, 24);
     return html`
       <div class="page">
-        <div class="top">
+        <div class="top ${this.config.rain_map === false ? "" : "withmap"}">
+          <div class="lcol">
           <div class="tile now">
             <panel-weather-fx condition=${w.state} ?dark=${this.dark}></panel-weather-fx>
             <div class="nowrow">
@@ -56,6 +58,14 @@ export class PageWeather extends PageBase {
               </div>`;
             })}
           </div>
+          </div>
+          ${this.config.rain_map === false
+            ? nothing
+            : html`<div class="tile mapt">
+                <div class="label"><ha-icon icon="mdi:weather-pouring"></ha-icon>Rain map</div>
+                <panel-rainmap .hass=${this.hass} ?active=${this.active}
+                  .latitude=${this.config.rain_map?.latitude} .longitude=${this.config.rain_map?.longitude}></panel-rainmap>
+              </div>`}
         </div>
         <div class="tile hours">
           <div class="label"><ha-icon icon="mdi:clock-outline"></ha-icon>Next 24 hours</div>
@@ -88,6 +98,26 @@ export class PageWeather extends PageBase {
         .top {
           grid-template-columns: 1fr;
         }
+      }
+      .top:not(.withmap) .lcol {
+        display: contents;
+      }
+      .top.withmap {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+      }
+      .lcol {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap);
+        min-width: 0;
+      }
+      .mapt {
+        display: flex;
+        flex-direction: column;
+        min-height: 520px;
+      }
+      .mapt panel-rainmap {
+        flex: 1;
       }
       .now {
         min-height: 300px;

@@ -64,6 +64,9 @@ export interface PanelConfig {
   home_page?: string;
 
   weather?: string;
+  /** Rain map on the Weather page (radar + Met Office UKV 2 km forecast), centred on the home
+   *  zone unless a latitude/longitude is given. `false` hides it. */
+  rain_map?: false | { latitude?: number; longitude?: number };
   calendars?: string[];
   /** Local calendar for reminders. Each event's description carries "For: Family" or "For: <name>";
    *  only family reminders are shown on the panel, personal ones just drive phone notifications. */
