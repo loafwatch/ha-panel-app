@@ -216,30 +216,52 @@ export class PanelRainmap extends LitElement {
   /** Met Office UKV 2 km for the area on screen (plus a margin). */
   private async fetchForecast() {
     const v = this.view();
-    const pad = 40;
     const z = this.z;
+    const pad = 24;
     const lat1 = latOf(v.y0 - pad, z);
     const lat0 = latOf(v.y0 + this.size.h + pad, z);
     const lon0 = lonOf(v.x0 - pad, z);
     const lon1 = lonOf(v.x0 + this.size.w + pad, z);
-    // Open-Meteo allows up to 1000 grid points per request (~1800 points per square degree
-    // at 2 km), so split the area into latitude strips
-    const strips = Math.max(1, Math.ceil(((lat1 - lat0) * (lon1 - lon0) * 1900) / 850));
-    const step = (lat1 - lat0) / strips;
-    const parts = await Promise.all(
-      Array.from({ length: strips }, async (_, i) => {
-        const a0 = lat0 + step * i;
-        const a1 = i === strips - 1 ? lat1 : a0 + step - 0.0005;
-        const url =
-          "https://api.open-meteo.com/v1/forecast?" +
-          `bounding_box=${a0.toFixed(4)},${lon0.toFixed(4)},${a1.toFixed(4)},${lon1.toFixed(4)}` +
-          "&hourly=precipitation&models=ukmo_uk_deterministic_2km&forecast_hours=14&timeformat=unixtime&timezone=GMT";
+    // Open-Meteo's free tier counts every grid point as a call (600 a minute, 10,000 a day).
+    // Zoomed in, fetch the native 2 km grid in bounding-box strips (up to 1000 points each);
+    // zoomed right out, sample a 4 km grid instead so it costs about the same.
+    const q = "&hourly=precipitation&models=ukmo_uk_deterministic_2km&forecast_hours=14&timeformat=unixtime&timezone=GMT";
+    const get = async (url: string) => {
+      for (let attempt = 0; ; attempt++) {
         const r = await fetch(url);
         const j = await r.json();
-        if (!r.ok) throw new Error(j?.reason ?? r.status);
-        return (Array.isArray(j) ? j : [j]) as any[];
-      }),
-    );
+        if (r.ok) return (Array.isArray(j) ? j : [j]) as any[];
+        if (attempt === 0 && /minutely/i.test(j?.reason ?? "")) {
+          await new Promise((res) => setTimeout(res, 65_000));
+          continue;
+        }
+        throw new Error(j?.reason ?? r.status);
+      }
+    };
+    let parts: any[][];
+    if (z >= 10) {
+      const strips = Math.max(1, Math.ceil(((lat1 - lat0) * (lon1 - lon0) * 1900) / 850));
+      const step = (lat1 - lat0) / strips;
+      parts = await Promise.all(
+        Array.from({ length: strips }, (_, i) => {
+          const a0 = lat0 + step * i;
+          const a1 = i === strips - 1 ? lat1 : a0 + step - 0.0005;
+          return get(`https://api.open-meteo.com/v1/forecast?bounding_box=${a0.toFixed(4)},${lon0.toFixed(4)},${a1.toFixed(4)},${lon1.toFixed(4)}${q}`);
+        }),
+      );
+    } else {
+      const dLat = 0.036;
+      const dLon = 0.06;
+      const pts: [number, number][] = [];
+      for (let la = lat0; la <= lat1; la += dLat) for (let lo = lon0; lo <= lon1; lo += dLon) pts.push([la, lo]);
+      const chunks: [number, number][][] = [];
+      for (let i = 0; i < pts.length; i += 150) chunks.push(pts.slice(i, i + 150));
+      parts = await Promise.all(
+        chunks.map((c) =>
+          get(`https://api.open-meteo.com/v1/forecast?latitude=${c.map((p) => p[0].toFixed(3)).join(",")}&longitude=${c.map((p) => p[1].toFixed(3)).join(",")}${q}`),
+        ),
+      );
+    }
     const list = parts.flat();
     if (!list[0]?.hourly) throw new Error("no forecast data");
     return {
