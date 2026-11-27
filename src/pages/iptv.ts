@@ -27,6 +27,15 @@ export class PageIptv extends PageBase {
   @state() private group = "";
   @state() private playing?: Channel;
   @state() private status = "";
+  /** Player controls (close, channel, volume) show on a tap and fade after a few seconds. */
+  @state() private ctrls = true;
+  private ctrlTimer?: number;
+
+  private poke = () => {
+    this.ctrls = true;
+    window.clearTimeout(this.ctrlTimer);
+    this.ctrlTimer = window.setTimeout(() => (this.ctrls = false), 3500);
+  };
   @state() private favs: string[] = (() => {
     try {
       return JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
@@ -92,6 +101,7 @@ export class PageIptv extends PageBase {
 
   private async play(c: Channel) {
     this.playing = c;
+    this.poke();
     keepAwake(this, true);
     this.status = "Loading…";
     await this.updateComplete;
@@ -141,6 +151,7 @@ export class PageIptv extends PageBase {
   }
 
   private stop() {
+    window.clearTimeout(this.ctrlTimer);
     this.hls?.destroy();
     this.hls = undefined;
     this.ts?.destroy();
@@ -196,7 +207,7 @@ export class PageIptv extends PageBase {
                 </div>`}
       </div>
       ${this.playing
-        ? html`<div class="player">
+        ? html`<div class="player ${this.ctrls ? "" : "quiet"}" @pointerdown=${this.poke} @pointermove=${this.ctrls ? this.poke : undefined}>
             <video playsinline autoplay></video>
             <div class="ptop">
               <div class="pn">${this.playing.name}</div>
@@ -360,6 +371,15 @@ export class PageIptv extends PageBase {
         justify-content: space-between;
         padding: 16px 20px;
         color: #fff;
+      }
+      .ptop,
+      .pbot {
+        transition: opacity 0.4s;
+      }
+      .player.quiet .ptop,
+      .player.quiet .pbot {
+        opacity: 0;
+        pointer-events: none;
       }
       .ptop {
         top: 0;

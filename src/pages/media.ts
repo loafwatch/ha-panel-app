@@ -1,5 +1,5 @@
 import { reg } from "../registry";
-import { css, html, nothing } from "lit";
+import { css, html } from "lit";
 import { state } from "lit/decorators.js";
 import { PageBase } from "./base";
 
@@ -23,7 +23,6 @@ export class PageMedia extends PageBase {
       ${this.visited
         ? html`<iframe src=${m.url} allow="autoplay; fullscreen; encrypted-media" allowfullscreen title=${m.title ?? "Media"}></iframe>`
         : html`<div class="empty">Loading…</div>`}
-      ${this.config.volume ? html`<panel-volume class="vol" .hass=${this.hass} entity=${this.config.volume}></panel-volume>` : nothing}
     </div>`;
   }
 
@@ -32,15 +31,8 @@ export class PageMedia extends PageBase {
     css`
       .wrap {
         position: absolute;
-        inset: 0 0 84px 0;
+        inset: 12px 0 100px 0;
         background: #101010;
-      }
-      .vol {
-        position: absolute;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%) scale(0.85);
-        opacity: 0.85;
       }
       iframe {
         width: 100%;
